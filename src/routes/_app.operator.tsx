@@ -34,6 +34,20 @@ function OperatorProfile() {
   const needsCalib = useMarcolaStore((s) => s.needsWeightCalibration());
   const daysSince = useMarcolaStore((s) => s.daysSinceWeightUpdate());
   const medals = useMarcolaStore((s) => s.getPRMedals());
+  const wipeData = useMarcolaStore((s) => s.wipeData);
+  const [wiping, setWiping] = useState(false);
+
+  const handleWipe = async () => {
+    setWiping(true);
+    try {
+      await wipeData();
+      toast.success("Sistema zerado", { description: "Logs, históricos e sessão local removidos." });
+    } catch {
+      toast.error("Falha parcial", { description: "Dados locais limpos; verifique conexão para sincronizar." });
+    } finally {
+      setWiping(false);
+    }
+  };
 
   const [editing, setEditing] = useState(false);
   const [draftWeight, setDraftWeight] = useState<string>(biometrics.weightKg?.toString() ?? "");
