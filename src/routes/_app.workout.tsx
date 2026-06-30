@@ -123,12 +123,13 @@ function WorkoutConsole() {
     <main className="relative z-10 flex min-h-0 flex-1 flex-col px-3 pt-2 pb-3">
       {/* ─────────── Top control rail ─────────── */}
       <div className="mb-2 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5">
-          <span className={`h-1.5 w-1.5 rounded-full ${isPaused ? "bg-amber animate-pulse" : "bg-emerald-400 animate-pulse"}`} />
-          <span className="font-mono-tactical text-[10px] tracking-[0.25em] text-muted-foreground">
-            {isPaused ? "PAUSADO" : "ATIVO"} · {elapsedLabel}
-          </span>
-        </div>
+        <SessionClock
+          startedAt={active.startedAt}
+          finishedAt={active.finishedAt}
+          pausedAt={active.pausedAt}
+          totalPausedMs={active.totalPausedMs}
+          isPaused={isPaused}
+        />
         <div className="flex items-center gap-1">
           {active.startedAt && !active.finishedAt && (
             isPaused ? (
