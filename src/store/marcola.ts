@@ -177,6 +177,7 @@ export const useMarcolaStore = create<State>()(
       muscleVolume: seedMuscleVolume,
       syncStatus: isSupabaseEnabled ? "idle" : "offline",
       lastSyncedAt: null,
+      lastWeekTonnage: 12.5,
 
       getActiveDay: () => {
         const { routine, active } = get();
@@ -186,6 +187,12 @@ export const useMarcolaStore = create<State>()(
         const day = get().getActiveDay();
         if (!day) return null;
         return day.exercises[get().active.exerciseIndex] ?? null;
+      },
+      getTodayDay: () => {
+        const { routine, weekdayMap } = get();
+        const dow = new Date().getDay();
+        const id = weekdayMap[dow];
+        return id ? routine.days.find((d) => d.id === id) ?? null : null;
       },
       getTonnage7d: () => {
         const r = get().routine; let total = 0;
