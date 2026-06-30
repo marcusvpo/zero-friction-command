@@ -100,6 +100,13 @@ export interface OverloadSuggestion {
   label: string;
 }
 
+export interface SessionTelemetry {
+  volumeKg: number;
+  sets: number;
+  isLive: boolean;
+}
+
+
 const COMPOUND_MUSCLES = new Set<MuscleId>([
   "chest", "quads", "lats", "glutes", "hamstrings", "lower-back",
 ]);
