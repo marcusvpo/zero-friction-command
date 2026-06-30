@@ -248,6 +248,8 @@ export const useMarcolaStore = create<State>()(
       lastSyncedAt: null,
       lastWeekTonnage: 12.5,
       lastSummary: null,
+      saturatedMap: {},
+      ratingOverrides: {},
 
       getActiveDay: () => {
         const { routine, active } = get();
