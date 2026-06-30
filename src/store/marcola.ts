@@ -181,6 +181,7 @@ export const useMarcolaStore = create<State>()(
       schedule: seedSchedule,
       inventory: seedInventory,
       muscleVolume: seedMuscleVolume,
+      weeklyVolume: {} as Record<MuscleId, number>,
       syncStatus: isSupabaseEnabled ? "idle" : "offline",
       lastSyncedAt: null,
       lastWeekTonnage: 12.5,
@@ -243,6 +244,68 @@ export const useMarcolaStore = create<State>()(
       persistRoutine: async () => {
         const ok = await saveRoutine(get().routine);
         if (ok) set({ syncStatus: "ok", lastSyncedAt: Date.now() });
+        return ok;
+      },
+
+      /* ──────────── Phase 5 public API ──────────── */
+
+      /** Returns today's scheduled WorkoutDay (based on weekdayMap). Re-hydrates routine from cloud if needed. */
+      fetchTodayWorkout: async () => {
+        const s = get();
+        if (isSupabaseEnabled && !s.lastSyncedAt) {
+          await s.hydrateFromCloud();
+        }
+        return get().getTodayDay();
+      },
+
+      /** Pulls trailing-7-day completed sets per primary muscle from Supabase. */
+      fetchWeeklyVolume: async () => {
+        const vol = await fetchWeeklyVolumeRemote();
+        set({ weeklyVolume: vol });
+        return vol;
+      },
+
+      /**
+       * Optimistic write of a single completed set to Supabase `workout_logs`.
+       * Returns false if the cloud write failed (UI already updated).
+       */
+      logCompletedSet: async (exerciseId, weight, reps, rpe) => {
+        const s = get();
+        let ex: Exercise | undefined;
+        for (const d of s.routine.days) {
+          const found = d.exercises.find((e) => e.id === exerciseId);
+          if (found) { ex = found; break; }
+        }
+        if (!ex) return false;
+
+        // Optimistic local bump of weekly volume so the heatmap glows instantly.
+        set((st) => ({
+          weeklyVolume: {
+            ...st.weeklyVolume,
+            [ex!.primary]: (st.weeklyVolume[ex!.primary] ?? 0) + 1,
+          },
+        }));
+
+        const ok = await pushWorkoutLog({
+          exercise_id: ex.id,
+          exercise_name: ex.name,
+          primary_muscle: ex.primary,
+          set_index: 0,
+          reps,
+          weight,
+          rpe: rpe ?? null,
+          performed_at: new Date().toISOString(),
+        });
+
+        if (!ok) {
+          // Rollback the optimistic bump on failure.
+          set((st) => ({
+            weeklyVolume: {
+              ...st.weeklyVolume,
+              [ex!.primary]: Math.max(0, (st.weeklyVolume[ex!.primary] ?? 1) - 1),
+            },
+          }));
+        }
         return ok;
       },
 
