@@ -64,7 +64,7 @@ function WorkoutConsole() {
     return () => window.clearInterval(id);
   }, [active.startedAt, active.finishedAt, isPaused]);
 
-  const elapsedLabel = useMemo(() => formatElapsed(getElapsedMs(active)), [active, /* eslint-disable react-hooks/exhaustive-deps */]);
+  const elapsedLabel = useMemo(() => formatElapsed(getElapsedMs(active)), [active]);
 
   const mm = String(Math.floor(rest.remaining / 60)).padStart(2, "0");
   const ss = String(rest.remaining % 60).padStart(2, "0");
