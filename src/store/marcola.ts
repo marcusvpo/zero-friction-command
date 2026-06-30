@@ -362,8 +362,12 @@ export const useMarcolaStore = create<State>()(
       seenSwipeHint: false,
 
       getActiveDay: () => {
-        const { routine, active } = get();
-        return routine.days.find((d) => d.id === active.dayId) ?? null;
+        const { routine, active, weekdayMap } = get();
+        const byId = active.dayId ? routine.days.find((d) => d.id === active.dayId) : null;
+        if (byId) return byId;
+        const todayId = weekdayMap[new Date().getDay()];
+        const today = todayId ? routine.days.find((d) => d.id === todayId) : null;
+        return today ?? routine.days[0] ?? null;
       },
       getActiveExercise: () => {
         const day = get().getActiveDay();
