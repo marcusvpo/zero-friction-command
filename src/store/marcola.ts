@@ -331,6 +331,7 @@ interface State {
   daysSinceWeightUpdate: () => number | null;
   needsWeightCalibration: () => boolean;
   getPRMedals: () => PRMedal[];
+  getWeeklyTonnage6w: () => WeeklyTonnagePoint[];
 
   /* smart overload + ux */
   loadHistory: () => Promise<void>;
