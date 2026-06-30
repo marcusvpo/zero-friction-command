@@ -1,6 +1,12 @@
-import { Activity, Flame } from "lucide-react";
+import { Activity, Flame, CloudOff } from "lucide-react";
+import { useEffect, useState } from "react";
+import { subscribeQueue } from "@/lib/sync-queue";
 
 export function TopTelemetryBar() {
+  const [pending, setPending] = useState(0);
+
+  useEffect(() => subscribeQueue(setPending), []);
+
   return (
     <header className="sticky top-0 z-30 px-4 pt-6 pb-4">
       <div className="flex items-start justify-between">
@@ -11,9 +17,16 @@ export function TopTelemetryBar() {
               Marcola Prime
             </span>
           </div>
-          <span className="font-mono-tactical text-[10px] tracking-[0.18em] text-muted-foreground/80">
-            SESSÃO · 00:42:15
-          </span>
+          {pending > 0 ? (
+            <span className="font-mono-tactical flex items-center gap-1 text-[10px] tracking-[0.18em] text-amber">
+              <CloudOff className="h-3 w-3" />
+              ↑ {pending} pendente{pending > 1 ? "s" : ""}
+            </span>
+          ) : (
+            <span className="font-mono-tactical text-[10px] tracking-[0.18em] text-muted-foreground/80">
+              SISTEMA · ONLINE
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-3">
@@ -26,17 +39,9 @@ export function TopTelemetryBar() {
 }
 
 function Telemetry({
-  icon: Icon,
-  value,
-  unit,
-  label,
-  tone,
+  icon: Icon, value, unit, label, tone,
 }: {
-  icon: typeof Activity;
-  value: string;
-  unit: string;
-  label: string;
-  tone: string;
+  icon: typeof Activity; value: string; unit: string; label: string; tone: string;
 }) {
   return (
     <div className="flex flex-col items-end">

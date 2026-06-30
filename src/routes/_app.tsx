@@ -4,6 +4,7 @@ import { TopTelemetryBar } from "@/components/marcola/TopTelemetryBar";
 import { BottomDock } from "@/components/marcola/BottomDock";
 import { PageTransition } from "@/components/marcola/PageTransition";
 import { useMarcolaStore } from "@/store/marcola";
+import { initSyncQueue } from "@/lib/sync-queue";
 
 export const Route = createFileRoute("/_app")({
   component: AppLayout,
@@ -11,8 +12,13 @@ export const Route = createFileRoute("/_app")({
 
 function AppLayout() {
   const hydrate = useMarcolaStore((s) => s.hydrateFromCloud);
+  const loadHistory = useMarcolaStore((s) => s.loadHistory);
 
-  useEffect(() => { void hydrate(); }, [hydrate]);
+  useEffect(() => {
+    initSyncQueue();
+    void hydrate();
+    void loadHistory();
+  }, [hydrate, loadHistory]);
 
   return (
     <div className="min-h-screen w-full bg-background">
