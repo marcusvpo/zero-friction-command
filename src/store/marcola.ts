@@ -64,12 +64,28 @@ export interface ActiveWorkout {
 export interface RestTimer { active: boolean; remaining: number; total: number; }
 export type WeekdayMap = Record<number, string | null>;
 
+export interface SessionScore {
+  total: number;       // 0-100
+  execution: number;   // 0-100
+  overload: number;    // 0-100
+  volume: number;      // 0-100
+  density: number;     // 0-100
+}
+
 export interface SessionSummary {
   durationMs: number;
   tonnageKg: number;
   setsCompleted: number;
   warmupSets: number;
   prs: { exerciseId: string; exerciseName: string; weight: number; reps: number }[];
+  score: SessionScore;
+}
+
+export interface WeeklyTonnagePoint {
+  week: string;        // "W-5" .. "W0"
+  weekStart: string;   // ISO date of Monday
+  tonnageKg: number;
+  deltaPct: number;    // vs previous week, 0 if no prev
 }
 
 /** Persistido por libraryId. Quando hiddenUntil > now → saturado. */
@@ -158,7 +174,7 @@ const legsExercises = (): Exercise[] => [
   { id: "lg-1", name: "Cadeira Extensora", primary: "quads", restSeconds: 75, tempo: "2-1-2-1", libraryId: "lib-cadeira-extensora", sets: mkSets3(10, 0) },
   { id: "lg-2", name: "Mesa Flexora", primary: "hamstrings", secondary: ["glutes"], restSeconds: 75, tempo: "2-1-2-1", libraryId: "lib-mesa-flexora", sets: mkSets3(10, 0) },
   { id: "lg-3", name: "Seated Leg Press", primary: "quads", secondary: ["glutes","hamstrings"], restSeconds: 120, tempo: "2-1-2-0", libraryId: "lib-leg-press-45", sets: mkSets3(10, 0) },
-  { id: "lg-4", name: "Hack Squat (Agachamento Smith)", primary: "quads", secondary: ["glutes","hamstrings"], restSeconds: 120, tempo: "3-1-1-0", libraryId: "lib-hack-squat", sets: mkSets3(10, 0), notes: "Anotado como hack squat — confirmar com operador se for ombros" },
+  { id: "lg-4", name: "Desenvolvimento Máquina (Ombro)", primary: "shoulders", secondary: ["triceps"], restSeconds: 90, tempo: "2-1-1-0", libraryId: "lib-desenvolvimento-maquina", sets: mkSets3(10, 0), notes: "Intercalado no leg day" },
   { id: "lg-5", name: "Elevação Lateral", primary: "shoulders", restSeconds: 60, tempo: "2-0-2-1", libraryId: "lib-elevacao-lateral", sets: mkSets3(10, 0) },
   { id: "lg-6", name: "Remada Alta Polia Baixa", primary: "shoulders", secondary: ["traps","biceps"], restSeconds: 75, tempo: "2-1-1-0", libraryId: "lib-remada-alta-polia", sets: mkSets3(10, 0) },
 ];
@@ -315,6 +331,7 @@ interface State {
   daysSinceWeightUpdate: () => number | null;
   needsWeightCalibration: () => boolean;
   getPRMedals: () => PRMedal[];
+  getWeeklyTonnage6w: () => WeeklyTonnagePoint[];
 
   /* smart overload + ux */
   loadHistory: () => Promise<void>;
@@ -686,11 +703,17 @@ export const useMarcolaStore = create<State>()(
 
         let tonnage = 0;
         let setsCompleted = 0;
+        let setsPlanned = 0;
         let warmupSets = 0;
         const prs: SessionSummary["prs"] = [];
+        let overloadHits = 0;
+        let overloadEligible = 0;
+        const sessionDayId = day?.id ?? null;
 
         if (day) {
           for (const ex of day.exercises) {
+            const workingSets = ex.sets.filter((st) => !st.isWarmup);
+            setsPlanned += workingSets.length;
             const topThisSession = ex.sets
               .filter((st) => st.completed && !st.isWarmup)
               .reduce((max, st) => (st.weight > max.weight ? { weight: st.weight, reps: st.reps } : max), { weight: 0, reps: 0 });
@@ -700,16 +723,79 @@ export const useMarcolaStore = create<State>()(
               setsCompleted++;
               tonnage += st.reps * st.weight;
             }
-            // Naive PR: any working set ≥ previous logged max for this exercise.
-            // (Without history we flag the top set of the session.)
             if (topThisSession.weight > 0) {
               prs.push({ exerciseId: ex.id, exerciseName: ex.name, weight: topThisSession.weight, reps: topThisSession.reps });
+            }
+            // Overload tracking vs suggestion
+            const sug = s.getSuggestion(ex.id);
+            if (sug && sug.reason !== "first-time" && topThisSession.weight > 0) {
+              overloadEligible++;
+              const target = sug.weight * sug.reps;
+              const got = topThisSession.weight * topThisSession.reps;
+              if (got >= target) overloadHits++;
             }
           }
         }
 
+        // ── Score components ──
+        const execution = setsPlanned > 0
+          ? Math.round(Math.min(100, (setsCompleted / setsPlanned) * 100))
+          : 0;
+
+        const overload = overloadEligible > 0
+          ? Math.round((overloadHits / overloadEligible) * 100)
+          : 50;
+
+        // Volume vs average of last 4 sessions on this same day
+        let volume = 70;
+        if (sessionDayId && tonnage > 0) {
+          const dayHistory: number[] = [];
+          const seenDates = new Set<string>();
+          // Walk all exercises in the day; pick session totals by date.
+          if (day) {
+            const dayExIds = new Set(day.exercises.map((e) => e.id));
+            const dateTotals = new Map<string, number>();
+            for (const exId of dayExIds) {
+              const logs = s.history[exId] ?? [];
+              for (const log of logs) {
+                const dateKey = log.performed_at.slice(0, 10);
+                dateTotals.set(dateKey, (dateTotals.get(dateKey) ?? 0) + log.reps * log.weight);
+              }
+            }
+            // Exclude today (this session not yet persisted, but defensive)
+            const todayKey = new Date().toISOString().slice(0, 10);
+            const sorted = [...dateTotals.entries()]
+              .filter(([d]) => d !== todayKey)
+              .sort((a, b) => b[0].localeCompare(a[0]))
+              .slice(0, 4);
+            for (const [d, t] of sorted) { seenDates.add(d); dayHistory.push(t); }
+          }
+          if (dayHistory.length > 0) {
+            const avg = dayHistory.reduce((a, b) => a + b, 0) / dayHistory.length;
+            if (avg > 0) {
+              const ratio = tonnage / avg;
+              // ratio 1.0 → 80, 1.2+ → 100, 0.8 → 60
+              volume = Math.round(Math.max(0, Math.min(100, 80 + (ratio - 1) * 100)));
+            }
+          }
+        }
+
+        // Density: tonnage per minute vs rest avg
+        const minutes = Math.max(1, durationMs / 60_000);
+        const tonnagePerMin = tonnage / minutes;
+        // Reference: ~150kg/min is good throughput. Scale 0..100.
+        const throughputScore = Math.round(Math.max(0, Math.min(100, (tonnagePerMin / 150) * 100)));
+        const restAvg = s.getAvgRest();
+        const restPenalty = restAvg > 90 ? Math.min(40, ((restAvg - 90) / 30) * 10) : 0;
+        const density = Math.round(Math.max(0, Math.min(100, throughputScore - restPenalty)));
+
+        const total = Math.round(
+          0.40 * execution + 0.25 * overload + 0.20 * volume + 0.15 * density
+        );
+        const score: SessionScore = { total, execution, overload, volume, density };
+
         const summary: SessionSummary = {
-          durationMs, tonnageKg: Math.round(tonnage), setsCompleted, warmupSets, prs,
+          durationMs, tonnageKg: Math.round(tonnage), setsCompleted, warmupSets, prs, score,
         };
 
         set({
@@ -888,6 +974,53 @@ export const useMarcolaStore = create<State>()(
           }
         }
         return Array.from(best.values()).sort((a, b) => b.weight - a.weight);
+      },
+
+      getWeeklyTonnage6w: () => {
+        const { history } = get();
+        // Monday-anchored ISO week start (UTC).
+        const mondayOf = (d: Date) => {
+          const x = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+          const day = x.getUTCDay(); // 0=Sun..6=Sat
+          const diff = (day === 0 ? -6 : 1 - day);
+          x.setUTCDate(x.getUTCDate() + diff);
+          return x;
+        };
+        const now = new Date();
+        const thisMonday = mondayOf(now);
+        const weeks: WeeklyTonnagePoint[] = [];
+        // Build empty 6 buckets W-5..W0
+        for (let i = 5; i >= 0; i--) {
+          const start = new Date(thisMonday);
+          start.setUTCDate(start.getUTCDate() - i * 7);
+          weeks.push({
+            week: i === 0 ? "W0" : `W-${i}`,
+            weekStart: start.toISOString().slice(0, 10),
+            tonnageKg: 0,
+            deltaPct: 0,
+          });
+        }
+        // Sum tonnage across all logged exercises.
+        for (const logs of Object.values(history)) {
+          for (const row of logs) {
+            const d = new Date(row.performed_at);
+            if (isNaN(d.getTime())) continue;
+            const mon = mondayOf(d);
+            const diffMs = thisMonday.getTime() - mon.getTime();
+            const weekIdx = Math.round(diffMs / (7 * 24 * 60 * 60 * 1000));
+            if (weekIdx < 0 || weekIdx > 5) continue;
+            const bucket = weeks[5 - weekIdx];
+            bucket.tonnageKg += row.reps * row.weight;
+          }
+        }
+        for (let i = 0; i < weeks.length; i++) {
+          weeks[i].tonnageKg = Math.round(weeks[i].tonnageKg);
+          const prev = i > 0 ? weeks[i - 1].tonnageKg : 0;
+          weeks[i].deltaPct = prev > 0
+            ? +(((weeks[i].tonnageKg - prev) / prev) * 100).toFixed(1)
+            : 0;
+        }
+        return weeks;
       },
 
       /* ──────────── Smart Overload + UX ──────────── */

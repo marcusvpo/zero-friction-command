@@ -1,6 +1,6 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { Trophy, Clock, Dumbbell, Flame, X } from "lucide-react";
-import type { SessionSummary } from "@/store/marcola";
+import type { SessionSummary, SessionScore } from "@/store/marcola";
 
 interface Props {
   summary: SessionSummary | null;
@@ -40,7 +40,10 @@ export function SessionSummaryModal({ summary, onClose }: Props) {
             </div>
             <h2 className="mt-2 text-2xl font-bold text-foreground">Missão Cumprida</h2>
 
-            <div className="mt-5 grid grid-cols-2 gap-3">
+            {/* ──────────── Score ring + components ──────────── */}
+            <ScoreBlock score={summary.score} />
+
+            <div className="mt-4 grid grid-cols-2 gap-3">
               <StatCard icon={Clock}    label="Duração"    value={formatDuration(summary.durationMs)} tone="cyan" />
               <StatCard icon={Dumbbell} label="Tonelagem"  value={`${(summary.tonnageKg/1000).toFixed(2)} t`} tone="matrix" />
               <StatCard icon={Flame}    label="Sets úteis" value={String(summary.setsCompleted)} tone="amber" />
@@ -103,4 +106,69 @@ function formatDuration(ms: number) {
   const sec = s % 60;
   if (h > 0) return `${h}h ${String(m).padStart(2,"0")}m`;
   return `${m}:${String(sec).padStart(2,"0")}`;
+}
+
+function scoreTone(v: number): { stroke: string; text: string } {
+  if (v >= 85) return { stroke: "#39FF14", text: "text-matrix" };
+  if (v >= 60) return { stroke: "#00F0FF", text: "text-cyan" };
+  return { stroke: "#FFB300", text: "text-amber" };
+}
+
+function ScoreBlock({ score }: { score: SessionScore }) {
+  const tone = scoreTone(score.total);
+  const radius = 38;
+  const circ = 2 * Math.PI * radius;
+  const offset = circ * (1 - score.total / 100);
+
+  return (
+    <div className="mt-4 rounded-xl bg-white/[0.03] p-3 ring-1 ring-white/5">
+      <div className="flex items-center gap-4">
+        {/* Ring */}
+        <div className="relative h-[96px] w-[96px] shrink-0">
+          <svg viewBox="0 0 96 96" className="h-full w-full -rotate-90">
+            <circle cx="48" cy="48" r={radius} stroke="oklch(0.25 0.02 260)" strokeWidth="6" fill="none" />
+            <circle
+              cx="48" cy="48" r={radius}
+              stroke={tone.stroke} strokeWidth="6" fill="none"
+              strokeLinecap="round"
+              strokeDasharray={circ}
+              strokeDashoffset={offset}
+              style={{ filter: `drop-shadow(0 0 6px ${tone.stroke})`, transition: "stroke-dashoffset 1s ease-out" }}
+            />
+          </svg>
+          <div className="absolute inset-0 grid place-items-center">
+            <div className="text-center leading-none">
+              <div className={`font-mono-tactical text-2xl font-bold ${tone.text}`}>{score.total}</div>
+              <div className="font-mono-tactical text-[8px] tracking-widest text-muted-foreground">SCORE</div>
+            </div>
+          </div>
+        </div>
+        {/* Components */}
+        <div className="min-w-0 flex-1 space-y-1.5">
+          <ScoreBar label="Execução"  value={score.execution} />
+          <ScoreBar label="Sobrecarga" value={score.overload} />
+          <ScoreBar label="Volume"    value={score.volume} />
+          <ScoreBar label="Densidade" value={score.density} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ScoreBar({ label, value }: { label: string; value: number }) {
+  const tone = scoreTone(value);
+  return (
+    <div className="space-y-0.5">
+      <div className="flex items-center justify-between font-mono-tactical text-[9px] tracking-widest">
+        <span className="text-muted-foreground">{label.toUpperCase()}</span>
+        <span className={tone.text}>{value}</span>
+      </div>
+      <div className="h-1 w-full overflow-hidden rounded-full bg-white/[0.06]">
+        <div
+          className="h-full rounded-full transition-[width] duration-700"
+          style={{ width: `${Math.max(2, value)}%`, background: tone.stroke, boxShadow: `0 0 6px ${tone.stroke}` }}
+        />
+      </div>
+    </div>
+  );
 }
