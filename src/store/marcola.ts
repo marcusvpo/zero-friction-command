@@ -373,16 +373,11 @@ export const useMarcolaStore = create<State>()(
         set((st) => ({
           weeklyVolume: { ...st.weeklyVolume, [ex!.primary]: (st.weeklyVolume[ex!.primary] ?? 0) + 1 },
         }));
-        const ok = await pushWorkoutLog({
+        enqueueWorkoutLog({
           exercise_id: ex.id, exercise_name: ex.name, primary_muscle: ex.primary,
           set_index: 0, reps, weight, rpe: rpe ?? null, performed_at: new Date().toISOString(),
         });
-        if (!ok) {
-          set((st) => ({
-            weeklyVolume: { ...st.weeklyVolume, [ex!.primary]: Math.max(0, (st.weeklyVolume[ex!.primary] ?? 1) - 1) },
-          }));
-        }
-        return ok;
+        return true;
       },
 
       /* ──────────── Routine editing ──────────── */
@@ -656,13 +651,13 @@ export const useMarcolaStore = create<State>()(
         });
 
         if (!updatedSet.isWarmup) {
-          void pushWorkoutLog({
+          enqueueWorkoutLog({
             exercise_id: ex.id, exercise_name: ex.name, primary_muscle: ex.primary,
             set_index: setIdx, reps: updatedSet.reps, weight: updatedSet.weight,
             rpe: updatedSet.rpe ?? null, performed_at: new Date().toISOString(),
-          }).then((ok) => {
-            if (!ok) {
-              set((st) => ({
+          });
+        }
+      },
                 weeklyVolume: { ...st.weeklyVolume, [ex.primary]: Math.max(0, (st.weeklyVolume[ex.primary] ?? 1) - 1) },
               }));
             }
