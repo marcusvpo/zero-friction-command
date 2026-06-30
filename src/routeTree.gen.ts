@@ -9,104 +9,133 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as WorkoutRouteImport } from './routes/workout'
-import { Route as LogisticsRouteImport } from './routes/logistics'
-import { Route as BuilderRouteImport } from './routes/builder'
-import { Route as IndexRouteImport } from './routes/index'
+import { Route as AppRouteImport } from './routes/_app'
+import { Route as AppIndexRouteImport } from './routes/_app.index'
+import { Route as AppWorkoutRouteImport } from './routes/_app.workout'
+import { Route as AppLogisticsRouteImport } from './routes/_app.logistics'
+import { Route as AppBuilderRouteImport } from './routes/_app.builder'
 
-const WorkoutRoute = WorkoutRouteImport.update({
-  id: '/workout',
-  path: '/workout',
+const AppRoute = AppRouteImport.update({
+  id: '/_app',
   getParentRoute: () => rootRouteImport,
 } as any)
-const LogisticsRoute = LogisticsRouteImport.update({
-  id: '/logistics',
-  path: '/logistics',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const BuilderRoute = BuilderRouteImport.update({
-  id: '/builder',
-  path: '/builder',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const IndexRoute = IndexRouteImport.update({
+const AppIndexRoute = AppIndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => AppRoute,
+} as any)
+const AppWorkoutRoute = AppWorkoutRouteImport.update({
+  id: '/workout',
+  path: '/workout',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppLogisticsRoute = AppLogisticsRouteImport.update({
+  id: '/logistics',
+  path: '/logistics',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppBuilderRoute = AppBuilderRouteImport.update({
+  id: '/builder',
+  path: '/builder',
+  getParentRoute: () => AppRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof IndexRoute
-  '/builder': typeof BuilderRoute
-  '/logistics': typeof LogisticsRoute
-  '/workout': typeof WorkoutRoute
+  '/': typeof AppIndexRoute
+  '/builder': typeof AppBuilderRoute
+  '/logistics': typeof AppLogisticsRoute
+  '/workout': typeof AppWorkoutRoute
 }
 export interface FileRoutesByTo {
-  '/': typeof IndexRoute
-  '/builder': typeof BuilderRoute
-  '/logistics': typeof LogisticsRoute
-  '/workout': typeof WorkoutRoute
+  '/builder': typeof AppBuilderRoute
+  '/logistics': typeof AppLogisticsRoute
+  '/workout': typeof AppWorkoutRoute
+  '/': typeof AppIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
-  '/': typeof IndexRoute
-  '/builder': typeof BuilderRoute
-  '/logistics': typeof LogisticsRoute
-  '/workout': typeof WorkoutRoute
+  '/_app': typeof AppRouteWithChildren
+  '/_app/builder': typeof AppBuilderRoute
+  '/_app/logistics': typeof AppLogisticsRoute
+  '/_app/workout': typeof AppWorkoutRoute
+  '/_app/': typeof AppIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths: '/' | '/builder' | '/logistics' | '/workout'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/builder' | '/logistics' | '/workout'
-  id: '__root__' | '/' | '/builder' | '/logistics' | '/workout'
+  to: '/builder' | '/logistics' | '/workout' | '/'
+  id:
+    | '__root__'
+    | '/_app'
+    | '/_app/builder'
+    | '/_app/logistics'
+    | '/_app/workout'
+    | '/_app/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  IndexRoute: typeof IndexRoute
-  BuilderRoute: typeof BuilderRoute
-  LogisticsRoute: typeof LogisticsRoute
-  WorkoutRoute: typeof WorkoutRoute
+  AppRoute: typeof AppRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/workout': {
-      id: '/workout'
-      path: '/workout'
-      fullPath: '/workout'
-      preLoaderRoute: typeof WorkoutRouteImport
+    '/_app': {
+      id: '/_app'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AppRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/logistics': {
-      id: '/logistics'
-      path: '/logistics'
-      fullPath: '/logistics'
-      preLoaderRoute: typeof LogisticsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/builder': {
-      id: '/builder'
-      path: '/builder'
-      fullPath: '/builder'
-      preLoaderRoute: typeof BuilderRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/': {
-      id: '/'
+    '/_app/': {
+      id: '/_app/'
       path: '/'
       fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AppIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/workout': {
+      id: '/_app/workout'
+      path: '/workout'
+      fullPath: '/workout'
+      preLoaderRoute: typeof AppWorkoutRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/logistics': {
+      id: '/_app/logistics'
+      path: '/logistics'
+      fullPath: '/logistics'
+      preLoaderRoute: typeof AppLogisticsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/builder': {
+      id: '/_app/builder'
+      path: '/builder'
+      fullPath: '/builder'
+      preLoaderRoute: typeof AppBuilderRouteImport
+      parentRoute: typeof AppRoute
     }
   }
 }
 
+interface AppRouteChildren {
+  AppBuilderRoute: typeof AppBuilderRoute
+  AppLogisticsRoute: typeof AppLogisticsRoute
+  AppWorkoutRoute: typeof AppWorkoutRoute
+  AppIndexRoute: typeof AppIndexRoute
+}
+
+const AppRouteChildren: AppRouteChildren = {
+  AppBuilderRoute: AppBuilderRoute,
+  AppLogisticsRoute: AppLogisticsRoute,
+  AppWorkoutRoute: AppWorkoutRoute,
+  AppIndexRoute: AppIndexRoute,
+}
+
+const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
-  IndexRoute: IndexRoute,
-  BuilderRoute: BuilderRoute,
-  LogisticsRoute: LogisticsRoute,
-  WorkoutRoute: WorkoutRoute,
+  AppRoute: AppRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

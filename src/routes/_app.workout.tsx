@@ -1,14 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { motion } from "framer-motion";
 import { Check, ChevronLeft, ChevronRight, Play, Square } from "lucide-react";
-import { TopTelemetryBar } from "@/components/marcola/TopTelemetryBar";
-import { BottomDock } from "@/components/marcola/BottomDock";
 import { Panel } from "@/components/marcola/Panel";
 import { RestTimer } from "@/components/marcola/RestTimer";
 import { useMarcolaStore } from "@/store/marcola";
 import { toast } from "sonner";
 
-export const Route = createFileRoute("/workout")({
+export const Route = createFileRoute("/_app/workout")({
   head: () => ({
     meta: [
       { title: "Workout Console · Marcola Prime" },
@@ -19,20 +17,6 @@ export const Route = createFileRoute("/workout")({
 });
 
 function WorkoutConsole() {
-  return (
-    <div className="min-h-screen w-full bg-background">
-      <div className="relative mx-auto flex min-h-screen w-full max-w-[440px] flex-col bg-transparent">
-        <span className="hud-corner-tl" aria-hidden />
-        <span className="hud-corner-tr" aria-hidden />
-        <TopTelemetryBar />
-        <ConsoleBody />
-        <BottomDock />
-      </div>
-    </div>
-  );
-}
-
-function ConsoleBody() {
   const routine = useMarcolaStore((s) => s.routine);
   const active = useMarcolaStore((s) => s.active);
   const setDay = useMarcolaStore((s) => s.startWorkout);
@@ -42,65 +26,57 @@ function ConsoleBody() {
   const prev = useMarcolaStore((s) => s.prevExercise);
   const finish = useMarcolaStore((s) => s.finishWorkout);
 
-  const day =
-    routine.days.find((d) => d.id === active.dayId) ?? routine.days[0];
+  const day = routine.days.find((d) => d.id === active.dayId) ?? routine.days[0];
   const exercise = day.exercises[active.exerciseIndex];
 
   return (
     <main className="relative z-10 flex-1 space-y-4 px-4 pt-2 pb-28">
       {/* Day selector */}
-      <div className="flex gap-1.5 overflow-x-auto">
+      <div className="flex gap-1.5 overflow-x-auto pb-1">
         {routine.days.map((d) => {
           const isActive = d.id === active.dayId;
           return (
-            <button
+            <motion.button
               key={d.id}
+              whileTap={{ scale: 0.95 }}
               onClick={() => setDay(d.id)}
-              className={`glass rounded-xl px-3 py-2 text-left transition-all ${
+              className={`glass min-h-[44px] shrink-0 rounded-xl px-3 py-2 text-left transition-all ${
                 isActive ? "ring-1 ring-cyan/60 shadow-glow-cyan" : ""
               }`}
             >
-              <div className="font-mono-tactical text-[9px] tracking-widest text-muted-foreground">
-                {d.code}
-              </div>
-              <div className={`text-[11px] font-medium ${isActive ? "text-cyan" : "text-foreground"}`}>
-                {d.name}
-              </div>
-            </button>
+              <div className="font-mono-tactical text-[9px] tracking-widest text-muted-foreground">{d.code}</div>
+              <div className={`text-[11px] font-medium ${isActive ? "text-cyan" : "text-foreground"}`}>{d.name}</div>
+            </motion.button>
           );
         })}
       </div>
 
       <RestTimer />
 
-      {/* Active exercise */}
       <Panel
-        title={day.name}
-        code={day.code}
-        status="ACTIVE"
+        title={day.name} code={day.code} status="ACTIVE"
         action={
-          <button
+          <motion.button
+            whileTap={{ scale: 0.95 }}
             onClick={() => { finish(); toast.success("Sessão finalizada"); }}
             className="font-mono-tactical text-[9px] tracking-widest text-rose-400 hover:text-rose-300"
           >
             <Square className="inline h-3 w-3" /> ENCERRAR
-          </button>
+          </motion.button>
         }
       >
-        <div className="mb-2 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-          {day.focus}
-        </div>
+        <div className="mb-2 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">{day.focus}</div>
 
         {exercise && (
           <div>
-            <div className="mb-3 flex items-center justify-between">
-              <div>
-                <div className="text-base font-medium text-foreground">{exercise.name}</div>
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <div className="truncate text-base font-medium text-foreground">{exercise.name}</div>
                 <div className="font-mono-tactical text-[10px] tracking-widest text-muted-foreground">
                   ALVO · {exercise.primary.toUpperCase()} · DESCANSO {exercise.restSeconds}s
                 </div>
               </div>
-              <div className="flex gap-1">
+              <div className="flex shrink-0 gap-1.5">
                 <NavBtn onClick={prev}><ChevronLeft className="h-4 w-4" /></NavBtn>
                 <NavBtn onClick={next}><ChevronRight className="h-4 w-4" /></NavBtn>
               </div>
@@ -113,7 +89,8 @@ function ConsoleBody() {
                   <motion.li
                     key={i}
                     layout
-                    className={`glass flex items-center justify-between rounded-xl px-3 py-2.5 ${
+                    whileTap={isCurrent ? { scale: 0.99 } : undefined}
+                    className={`glass flex min-h-[52px] items-center justify-between rounded-xl px-3 py-2.5 ${
                       isCurrent ? "ring-1 ring-cyan/60" : ""
                     } ${set.completed ? "opacity-50" : ""}`}
                   >
@@ -133,12 +110,12 @@ function ConsoleBody() {
                       </span>
                     ) : isCurrent ? (
                       <motion.button
-                        whileTap={{ scale: 0.94 }}
-                        onClick={() => {
-                          completeSet();
+                        whileTap={{ scale: 0.92 }}
+                        onClick={async () => {
+                          await completeSet();
                           toast.success("Set registrado", { description: `Descanso ${exercise.restSeconds}s iniciado` });
                         }}
-                        className="flex items-center gap-1 rounded-full bg-cyan px-3 py-1 text-background"
+                        className="flex min-h-[36px] items-center gap-1 rounded-full bg-cyan px-3 py-1 text-background"
                       >
                         <Play className="h-3 w-3" />
                         <span className="font-mono-tactical text-[10px] tracking-widest">COMPLETAR</span>
@@ -156,7 +133,6 @@ function ConsoleBody() {
         )}
       </Panel>
 
-      {/* Exercise list */}
       <Panel title="Plano da Sessão" code={`${day.exercises.length} EX`} status="OK">
         <ul className="space-y-1">
           {day.exercises.map((ex, i) => {
@@ -164,9 +140,10 @@ function ConsoleBody() {
             const isCur = i === active.exerciseIndex;
             return (
               <li key={ex.id}>
-                <button
+                <motion.button
+                  whileTap={{ scale: 0.98 }}
                   onClick={() => selectExercise(i)}
-                  className={`flex w-full items-center justify-between rounded-lg px-2 py-2 text-left transition-colors ${
+                  className={`flex min-h-[44px] w-full items-center justify-between rounded-lg px-2 py-2 text-left transition-colors ${
                     isCur ? "bg-cyan/10 text-cyan" : "hover:bg-white/5 text-foreground"
                   }`}
                 >
@@ -180,7 +157,7 @@ function ConsoleBody() {
                     {ex.sets.filter((s) => s.completed).length}/{ex.sets.length}
                     {done && <span className="ml-1 text-emerald-400">✓</span>}
                   </span>
-                </button>
+                </motion.button>
               </li>
             );
           })}
@@ -192,11 +169,12 @@ function ConsoleBody() {
 
 function NavBtn({ children, onClick }: { children: React.ReactNode; onClick: () => void }) {
   return (
-    <button
+    <motion.button
+      whileTap={{ scale: 0.92 }}
       onClick={onClick}
-      className="glass grid h-8 w-8 place-items-center rounded-lg text-foreground hover:text-cyan"
+      className="glass grid h-11 w-11 place-items-center rounded-lg text-foreground hover:text-cyan"
     >
       {children}
-    </button>
+    </motion.button>
   );
 }
