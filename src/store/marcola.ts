@@ -271,6 +271,26 @@ export const useMarcolaStore = create<State>()(
         },
       })),
 
+      setSplit: (split) => set((s) => ({ routine: { ...s.routine, split } })),
+
+      assignWeekday: (weekday, dayId) => set((s) => ({ weekdayMap: { ...s.weekdayMap, [weekday]: dayId } })),
+
+      adjustCurrentSet: (field, delta) => set((s) => {
+        const day = s.getActiveDay(); if (!day) return s;
+        const exIdx = s.active.exerciseIndex;
+        const setIdx = s.active.setIndex;
+        const ex = day.exercises[exIdx]; if (!ex) return s;
+        const current = ex.sets[setIdx]; if (!current) return s;
+        const step = field === "weight" ? 2.5 : 1;
+        const nextVal = Math.max(0, +(current[field] + delta * step).toFixed(2));
+        const newDays = s.routine.days.map((d) => d.id !== day.id ? d : {
+          ...d, exercises: d.exercises.map((e, i) => i !== exIdx ? e : {
+            ...e, sets: e.sets.map((st, j) => j !== setIdx ? st : { ...st, [field]: nextVal }),
+          }),
+        });
+        return { routine: { ...s.routine, days: newDays } };
+      }),
+
       startWorkout: (dayId) => set({
         active: { dayId, exerciseIndex: 0, setIndex: 0, startedAt: Date.now(), finishedAt: null, log: [] },
         rest: { active: false, remaining: 0, total: 0 },
