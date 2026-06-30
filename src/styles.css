@@ -192,3 +192,35 @@
 @utility ticker-scroll {
   animation: ticker 28s linear infinite;
 }
+
+/* ───── Anatomical Body HUD ───── */
+@utility anatomical-grid {
+  background-image:
+    linear-gradient(to right, color-mix(in oklab, var(--cyan) 18%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in oklab, var(--cyan) 18%, transparent) 1px, transparent 1px);
+  background-size: 24px 24px;
+  mask-image: radial-gradient(ellipse 70% 80% at 50% 50%, black 40%, transparent 90%);
+}
+@utility anatomical-scanlines {
+  background: repeating-linear-gradient(
+    0deg,
+    transparent 0 3px,
+    color-mix(in oklab, var(--cyan) 8%, transparent) 3px 4px
+  );
+}
+@keyframes anatomical-sweep {
+  0%   { top: -2%;  opacity: 0; }
+  10%  { opacity: 1; }
+  90%  { opacity: 1; }
+  100% { top: 102%; opacity: 0; }
+}
+@utility anatomical-sweep {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in oklab, var(--cyan) 80%, transparent),
+    transparent
+  );
+  box-shadow: 0 0 18px color-mix(in oklab, var(--cyan) 70%, transparent);
+  animation: anatomical-sweep 3.4s ease-in-out infinite;
+}
