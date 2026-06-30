@@ -23,7 +23,7 @@ export function CoachIntel() {
   const visible = expanded ? insights : insights.slice(0, 6);
 
   return (
-    <Panel title="Coach Intel" code="M6" status={counts.crit > 0 ? "ALERT" : counts.warn > 0 ? "REVIEW" : "OK"}>
+    <Panel title="Coach Intel" code="M6" status={counts.crit > 0 || counts.warn > 0 ? "WARN" : "OK"}>
       <div className="space-y-3">
         <header className="flex items-center justify-between gap-2 font-mono-tactical text-[10px] tracking-widest">
           <div className="flex items-center gap-2 text-muted-foreground">
