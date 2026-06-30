@@ -171,6 +171,8 @@ interface State {
   lastSyncedAt: number | null;
   lastWeekTonnage: number;
   lastSummary: SessionSummary | null;
+  saturatedMap: Record<string, SaturationEntry>;
+  ratingOverrides: Record<string, RatingOverride>;
 
   /* selectors */
   getActiveDay: () => WorkoutDay | null;
