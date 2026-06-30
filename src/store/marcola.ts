@@ -976,6 +976,53 @@ export const useMarcolaStore = create<State>()(
         return Array.from(best.values()).sort((a, b) => b.weight - a.weight);
       },
 
+      getWeeklyTonnage6w: () => {
+        const { history } = get();
+        // Monday-anchored ISO week start (UTC).
+        const mondayOf = (d: Date) => {
+          const x = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+          const day = x.getUTCDay(); // 0=Sun..6=Sat
+          const diff = (day === 0 ? -6 : 1 - day);
+          x.setUTCDate(x.getUTCDate() + diff);
+          return x;
+        };
+        const now = new Date();
+        const thisMonday = mondayOf(now);
+        const weeks: WeeklyTonnagePoint[] = [];
+        // Build empty 6 buckets W-5..W0
+        for (let i = 5; i >= 0; i--) {
+          const start = new Date(thisMonday);
+          start.setUTCDate(start.getUTCDate() - i * 7);
+          weeks.push({
+            week: i === 0 ? "W0" : `W-${i}`,
+            weekStart: start.toISOString().slice(0, 10),
+            tonnageKg: 0,
+            deltaPct: 0,
+          });
+        }
+        // Sum tonnage across all logged exercises.
+        for (const logs of Object.values(history)) {
+          for (const row of logs) {
+            const d = new Date(row.performed_at);
+            if (isNaN(d.getTime())) continue;
+            const mon = mondayOf(d);
+            const diffMs = thisMonday.getTime() - mon.getTime();
+            const weekIdx = Math.round(diffMs / (7 * 24 * 60 * 60 * 1000));
+            if (weekIdx < 0 || weekIdx > 5) continue;
+            const bucket = weeks[5 - weekIdx];
+            bucket.tonnageKg += row.reps * row.weight;
+          }
+        }
+        for (let i = 0; i < weeks.length; i++) {
+          weeks[i].tonnageKg = Math.round(weeks[i].tonnageKg);
+          const prev = i > 0 ? weeks[i - 1].tonnageKg : 0;
+          weeks[i].deltaPct = prev > 0
+            ? +(((weeks[i].tonnageKg - prev) / prev) * 100).toFixed(1)
+            : 0;
+        }
+        return weeks;
+      },
+
       /* ──────────── Smart Overload + UX ──────────── */
 
       loadHistory: async () => {
