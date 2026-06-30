@@ -71,6 +71,12 @@ export interface SessionSummary {
   prs: { exerciseId: string; exerciseName: string; weight: number; reps: number }[];
 }
 
+/** Persistido por libraryId. Quando hiddenUntil > now → saturado. */
+export interface SaturationEntry { hiddenUntil: number; markedAt: number; weeks: number }
+export interface RatingOverride {
+  stars: number; rationale: string; source: "deep-research"; updatedAt: string;
+}
+
 export const WEEKDAY_LABELS = ["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SÁB"];
 export const WEEKDAY_LONG  = ["Domingo","Segunda","Terça","Quarta","Quinta","Sexta","Sábado"];
 
