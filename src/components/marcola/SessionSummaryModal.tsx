@@ -40,7 +40,10 @@ export function SessionSummaryModal({ summary, onClose }: Props) {
             </div>
             <h2 className="mt-2 text-2xl font-bold text-foreground">Missão Cumprida</h2>
 
-            <div className="mt-5 grid grid-cols-2 gap-3">
+            {/* ──────────── Score ring + components ──────────── */}
+            <ScoreBlock score={summary.score} />
+
+            <div className="mt-4 grid grid-cols-2 gap-3">
               <StatCard icon={Clock}    label="Duração"    value={formatDuration(summary.durationMs)} tone="cyan" />
               <StatCard icon={Dumbbell} label="Tonelagem"  value={`${(summary.tonnageKg/1000).toFixed(2)} t`} tone="matrix" />
               <StatCard icon={Flame}    label="Sets úteis" value={String(summary.setsCompleted)} tone="amber" />
