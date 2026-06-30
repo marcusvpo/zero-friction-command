@@ -1,12 +1,14 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { motion, AnimatePresence } from "framer-motion";
-import { useEffect, useMemo, useState } from "react";
+import { motion, AnimatePresence, type PanInfo } from "framer-motion";
+import { memo, useEffect, useMemo, useState } from "react";
 import {
   Check, ChevronLeft, ChevronRight, Minus, Plus, Square, Timer, SkipForward, Target,
   Pause, Play, Library as LibraryIcon, Flame, Trash2, Settings2, MoreVertical, Save,
+  TrendingUp, Sparkles, Hand,
 } from "lucide-react";
-import { useMarcolaStore, type ExerciseSet } from "@/store/marcola";
+import { useMarcolaStore, type ExerciseSet, type OverloadSuggestion } from "@/store/marcola";
 import { SessionSummaryModal } from "@/components/marcola/SessionSummaryModal";
+import { SessionClock } from "@/components/marcola/SessionClock";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/workout")({
