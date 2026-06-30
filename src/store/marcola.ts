@@ -893,6 +893,7 @@ export const useMarcolaStore = create<State>()(
         saturatedMap: s.saturatedMap,
         ratingOverrides: s.ratingOverrides,
         biometrics: s.biometrics,
+        seenSwipeHint: s.seenSwipeHint,
       }),
     },
   ),
