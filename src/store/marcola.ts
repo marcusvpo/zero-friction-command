@@ -986,7 +986,7 @@ export const useMarcolaStore = create<State>()(
       markSwipeHintSeen: () => set({ seenSwipeHint: true }),
     }),
     {
-      name: "marcola-prime-store-v2",
+      name: "marcola-prime-store-v3",
       storage: createJSONStorage(() => (typeof window !== "undefined" ? window.localStorage : (undefined as never))),
       partialize: (s) => ({
         routine: s.routine,
