@@ -8,6 +8,7 @@ import {
   upsertInventory,
   fetchSchedule,
   setSupplementTaken,
+  fetchWeeklyVolume as fetchWeeklyVolumeRemote,
 } from "@/lib/db";
 import { isSupabaseEnabled } from "@/lib/supabase";
 

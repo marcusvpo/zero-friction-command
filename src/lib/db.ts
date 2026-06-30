@@ -89,6 +89,32 @@ export async function fetchRecentLogs(limit = 50): Promise<WorkoutLogRow[]> {
   return data as WorkoutLogRow[];
 }
 
+/**
+ * fetchWeeklyVolume — Aggregates completed sets per primary muscle for the
+ * trailing 7 days (UTC). Returns an empty record when Supabase is unavailable
+ * so the heatmap simply renders zero-load.
+ */
+export async function fetchWeeklyVolume(): Promise<Record<MuscleId, number>> {
+  const empty = {} as Record<MuscleId, number>;
+  if (!isSupabaseEnabled || !supabase) return empty;
+  const owner = await getOwnerId();
+  if (!owner) return empty;
+
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const { data, error } = await supabase
+    .from("workout_logs")
+    .select("primary_muscle")
+    .eq("owner", owner)
+    .gte("performed_at", sevenDaysAgo);
+
+  if (error || !data) return empty;
+  const acc = {} as Record<MuscleId, number>;
+  for (const row of data as { primary_muscle: MuscleId }[]) {
+    acc[row.primary_muscle] = (acc[row.primary_muscle] ?? 0) + 1;
+  }
+  return acc;
+}
+
 /* ────────────────────────────── Supplement inventory ────────────────────────────── */
 
 export async function fetchInventory(): Promise<InventoryItem[] | null> {
