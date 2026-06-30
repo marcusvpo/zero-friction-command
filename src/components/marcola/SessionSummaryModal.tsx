@@ -1,6 +1,6 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { Trophy, Clock, Dumbbell, Flame, X } from "lucide-react";
-import type { SessionSummary } from "@/store/marcola";
+import type { SessionSummary, SessionScore } from "@/store/marcola";
 
 interface Props {
   summary: SessionSummary | null;
