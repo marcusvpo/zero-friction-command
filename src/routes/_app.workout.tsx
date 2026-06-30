@@ -1,12 +1,14 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { motion, AnimatePresence } from "framer-motion";
-import { useEffect, useMemo, useState } from "react";
+import { motion, AnimatePresence, type PanInfo } from "framer-motion";
+import { memo, useEffect, useMemo, useState } from "react";
 import {
   Check, ChevronLeft, ChevronRight, Minus, Plus, Square, Timer, SkipForward, Target,
   Pause, Play, Library as LibraryIcon, Flame, Trash2, Settings2, MoreVertical, Save,
+  TrendingUp, Sparkles, Hand,
 } from "lucide-react";
-import { useMarcolaStore, type ExerciseSet } from "@/store/marcola";
+import { useMarcolaStore, type ExerciseSet, type OverloadSuggestion } from "@/store/marcola";
 import { SessionSummaryModal } from "@/components/marcola/SessionSummaryModal";
+import { SessionClock } from "@/components/marcola/SessionClock";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/workout")({
@@ -41,6 +43,10 @@ function WorkoutConsole() {
   const clearSummary = useMarcolaStore((s) => s.clearSummary);
   const toggleWarmup = useMarcolaStore((s) => s.toggleWarmup);
   const setSetRest = useMarcolaStore((s) => s.setSetRest);
+  const getSuggestion = useMarcolaStore((s) => s.getSuggestion);
+  const adjustRestForRPE = useMarcolaStore((s) => s.adjustRestForRPE);
+  const seenSwipeHint = useMarcolaStore((s) => s.seenSwipeHint);
+  const markSwipeHintSeen = useMarcolaStore((s) => s.markSwipeHintSeen);
 
   const day = routine.days.find((d) => d.id === active.dayId) ?? routine.days[0];
   const exercise = day.exercises[active.exerciseIndex];
@@ -49,40 +55,63 @@ function WorkoutConsole() {
   const isPaused = active.pausedAt !== null;
   const isResting = rest.active;
 
-  // ───── Rest tick ─────
+  // ───── Rest tick (parent only re-renders when rest.remaining changes) ─────
   useEffect(() => {
     if (!rest.active || isPaused) return;
     const id = window.setInterval(tickRest, 1000);
     return () => window.clearInterval(id);
   }, [rest.active, isPaused, tickRest]);
 
-  // ───── Live total-session ticker (1s pulse) ─────
-  const [, setNow] = useState(0);
-  useEffect(() => {
-    if (!active.startedAt || active.finishedAt || isPaused) return;
-    const id = window.setInterval(() => setNow((n) => n + 1), 1000);
-    return () => window.clearInterval(id);
-  }, [active.startedAt, active.finishedAt, isPaused]);
-
-  const elapsedLabel = useMemo(() => formatElapsed(getElapsedMs(active)), [active]);
+  // ───── Smart Overload suggestion ─────
+  const suggestion: OverloadSuggestion | null = useMemo(
+    () => (exercise ? getSuggestion(exercise.id) : null),
+    [exercise, getSuggestion, active.exerciseIndex],
+  );
+  const isSmartMatch = !!(
+    suggestion && currentSet &&
+    Math.abs(currentSet.weight - suggestion.weight) < 0.01 &&
+    currentSet.reps === suggestion.reps
+  );
 
   const mm = String(Math.floor(rest.remaining / 60)).padStart(2, "0");
   const ss = String(rest.remaining % 60).padStart(2, "0");
   const restPct = rest.total > 0 ? (rest.remaining / rest.total) * 100 : 0;
 
-  // Confirm-set drawer for RPE/notes (optional, auto-dismisses)
+  // Drawers
   const [postSetDrawer, setPostSetDrawer] = useState<{ open: boolean }>({ open: false });
-  // Per-set config drawer (warm-up / rest override)
   const [setConfigOpen, setSetConfigOpen] = useState(false);
-  // Discard confirm
   const [discardOpen, setDiscardOpen] = useState(false);
+  // Hint banner — só na primeira sessão.
+  const [hintVisible, setHintVisible] = useState(!seenSwipeHint);
+  useEffect(() => {
+    if (!hintVisible) return;
+    const t = window.setTimeout(() => {
+      setHintVisible(false);
+      markSwipeHintSeen();
+    }, 4000);
+    return () => window.clearTimeout(t);
+  }, [hintVisible, markSwipeHintSeen]);
 
   const handleConfirm = async () => {
     if (!exercise || !currentSet) return;
     await completeSet();
     setPostSetDrawer({ open: true });
     window.setTimeout(() => setPostSetDrawer({ open: false }), 2400);
+    if (typeof navigator !== "undefined" && "vibrate" in navigator) navigator.vibrate?.(20);
     toast.success("Set registrado", { description: `Descanso ${currentSet.restSeconds ?? exercise.restSeconds}s iniciado` });
+  };
+
+  const handleSkip = () => {
+    if (!exercise) return;
+    if (typeof navigator !== "undefined" && "vibrate" in navigator) navigator.vibrate?.([15, 30, 15]);
+    next();
+    toast.message("Set pulado", { description: "Avançando para próximo exercício" });
+  };
+
+  const handleDragEnd = (_: unknown, info: PanInfo) => {
+    const THRESHOLD = 80;
+    if (info.offset.x > THRESHOLD) void handleConfirm();
+    else if (info.offset.x < -THRESHOLD) handleSkip();
   };
 
   const handleFinish = () => {
@@ -94,12 +123,13 @@ function WorkoutConsole() {
     <main className="relative z-10 flex min-h-0 flex-1 flex-col px-3 pt-2 pb-3">
       {/* ─────────── Top control rail ─────────── */}
       <div className="mb-2 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5">
-          <span className={`h-1.5 w-1.5 rounded-full ${isPaused ? "bg-amber animate-pulse" : "bg-emerald-400 animate-pulse"}`} />
-          <span className="font-mono-tactical text-[10px] tracking-[0.25em] text-muted-foreground">
-            {isPaused ? "PAUSADO" : "ATIVO"} · {elapsedLabel}
-          </span>
-        </div>
+        <SessionClock
+          startedAt={active.startedAt}
+          finishedAt={active.finishedAt}
+          pausedAt={active.pausedAt}
+          totalPausedMs={active.totalPausedMs}
+          isPaused={isPaused}
+        />
         <div className="flex items-center gap-1">
           {active.startedAt && !active.finishedAt && (
             isPaused ? (
@@ -219,12 +249,34 @@ function WorkoutConsole() {
           /* ─────── GPS EXECUTION ─────── */
           <motion.section
             key={`ex-${exercise.id}-${active.setIndex}`}
+            drag="x"
+            dragDirectionLock
+            dragConstraints={{ left: 0, right: 0 }}
+            dragElastic={0.25}
+            onDragEnd={handleDragEnd}
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -12 }}
             transition={{ type: "spring", stiffness: 220, damping: 24 }}
-            className="glass-strong flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl p-3"
+            className="glass-strong relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl p-3 touch-pan-y"
           >
+            {/* Swipe hint */}
+            <AnimatePresence>
+              {hintVisible && (
+                <motion.div
+                  initial={{ opacity: 0, y: -8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-center justify-center gap-2 rounded-t-2xl bg-cyan/10 py-1.5 text-cyan ring-1 ring-cyan/30"
+                >
+                  <Hand className="h-3 w-3" />
+                  <span className="font-mono-tactical text-[9px] tracking-[0.25em]">
+                    ← PULAR · CONFIRMAR →
+                  </span>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
             {/* Header */}
             <header className="flex items-center justify-between gap-2">
               <NavBtn onClick={prev} aria-label="Exercício anterior"><ChevronLeft className="h-5 w-5" /></NavBtn>
@@ -237,7 +289,34 @@ function WorkoutConsole() {
               <NavBtn onClick={next} aria-label="Próximo exercício"><ChevronRight className="h-5 w-5" /></NavBtn>
             </header>
 
-            {/* (sem imagem — design data-first) */}
+            {/* Smart Overload banner */}
+            {suggestion && (
+              <button
+                onClick={() => {
+                  // Pull current values toward suggestion
+                  const wDelta = Math.round((suggestion.weight - currentSet.weight) / 2.5);
+                  const rDelta = suggestion.reps - currentSet.reps;
+                  for (let i = 0; i < Math.abs(wDelta); i++) adjust("weight", wDelta > 0 ? 1 : -1);
+                  for (let i = 0; i < Math.abs(rDelta); i++) adjust("reps", rDelta > 0 ? 1 : -1);
+                }}
+                className={`mt-2 flex w-full items-center justify-between gap-2 rounded-lg px-3 py-1.5 ring-1 transition-colors ${
+                  isSmartMatch
+                    ? "bg-matrix/15 ring-matrix/60"
+                    : "bg-cyan/5 ring-cyan/25 hover:bg-cyan/10"
+                }`}
+              >
+                <span className="flex items-center gap-1.5">
+                  <Sparkles className={`h-3 w-3 ${isSmartMatch ? "text-matrix" : "text-cyan"}`} />
+                  <span className={`font-mono-tactical text-[10px] tracking-widest ${isSmartMatch ? "text-matrix" : "text-cyan"}`}>
+                    META · {suggestion.weight}kg × {suggestion.reps}
+                  </span>
+                </span>
+                <span className="font-mono-tactical flex items-center gap-1 text-[9px] tracking-widest text-muted-foreground">
+                  {suggestion.deltaKg > 0 && <TrendingUp className="h-3 w-3 text-matrix" />}
+                  {suggestion.label}
+                </span>
+              </button>
+            )}
 
             {/* Set indicator */}
             <div className="mt-2 flex items-center justify-center gap-1">
@@ -262,10 +341,10 @@ function WorkoutConsole() {
               </button>
             </div>
 
-            {/* Steppers */}
+            {/* Steppers (memo'd) */}
             <div className="mt-2 grid grid-cols-2 gap-2">
-              <Stepper label="PESO" unit="kg" value={currentSet.weight} onMinus={() => adjust("weight", -1)} onPlus={() => adjust("weight", +1)} tone="cyan" />
-              <Stepper label="REPS" unit="reps" value={currentSet.reps} onMinus={() => adjust("reps", -1)} onPlus={() => adjust("reps", +1)} tone="matrix" />
+              <MemoStepper label="PESO" unit="kg" value={currentSet.weight} onMinus={() => adjust("weight", -1)} onPlus={() => adjust("weight", +1)} tone="cyan" />
+              <MemoStepper label="REPS" unit="reps" value={currentSet.reps} onMinus={() => adjust("reps", -1)} onPlus={() => adjust("reps", +1)} tone="matrix" />
             </div>
 
             {/* Target */}
@@ -305,18 +384,26 @@ function WorkoutConsole() {
               })}
             </div>
 
-            {/* CONFIRM SET — sticky inside card */}
+            {/* CONFIRM SET — verde sólido em match, gradiente caso contrário */}
             <motion.button
               whileTap={{ scale: 0.98 }}
               disabled={isPaused}
               onClick={handleConfirm}
-              className="mt-2 flex min-h-[60px] w-full items-center justify-center gap-3 overflow-hidden rounded-xl bg-gradient-to-r from-matrix via-cyan to-matrix text-background disabled:opacity-50"
-              style={{ boxShadow: "0 0 32px rgba(57,255,20,0.5)" }}
+              className={`relative mt-2 flex min-h-[60px] w-full items-center justify-center gap-3 overflow-hidden rounded-xl text-background disabled:opacity-50 ${
+                isSmartMatch
+                  ? "bg-matrix"
+                  : "bg-gradient-to-r from-matrix via-cyan to-matrix"
+              }`}
+              style={{
+                boxShadow: isSmartMatch
+                  ? "0 0 44px rgba(57,255,20,0.85), inset 0 0 18px rgba(57,255,20,0.4)"
+                  : "0 0 32px rgba(57,255,20,0.5)",
+              }}
             >
               <span className="absolute inset-0 bg-[linear-gradient(120deg,transparent,rgba(255,255,255,0.35),transparent)] bg-[length:200%_100%] animate-[shimmer_3s_linear_infinite]" />
               <Check className="relative h-5 w-5" strokeWidth={3} />
               <span className="font-mono-tactical relative text-sm font-bold uppercase tracking-[0.25em]">
-                {isPaused ? "Pausado" : "Confirm Set"}
+                {isPaused ? "Pausado" : isSmartMatch ? "PR · CONFIRMAR" : "Confirm Set"}
               </span>
             </motion.button>
           </motion.section>
@@ -350,10 +437,13 @@ function WorkoutConsole() {
                 <button
                   key={rpe}
                   onClick={() => {
-                    // Patch the just-completed set (previous index)
-                    // Simplest: store RPE in log via setSetRest equivalent — handled via direct state mutation here.
+                    adjustRestForRPE(rpe);
                     setPostSetDrawer({ open: false });
-                    toast.message(`RPE ${rpe} registrado`);
+                    const msg = rpe <= 7 ? "Rest reduzido em 15s (RPE baixo)" :
+                                rpe === 9 ? "Rest +30s (RPE alto)" :
+                                rpe >= 10 ? "Rest +60s (RPE máximo)" :
+                                "RPE alvo atingido";
+                    toast.message(`RPE ${rpe}`, { description: msg });
                   }}
                   className="glass h-10 flex-1 rounded-md font-mono-tactical text-xs text-foreground hover:bg-cyan/10 hover:text-cyan"
                 >
@@ -465,22 +555,6 @@ function WorkoutConsole() {
   );
 }
 
-function getElapsedMs(a: { startedAt: number | null; finishedAt: number | null; pausedAt: number | null; totalPausedMs: number }) {
-  if (!a.startedAt) return 0;
-  const end = a.finishedAt ?? Date.now();
-  const pausedExtra = a.pausedAt ? Date.now() - a.pausedAt : 0;
-  return Math.max(0, end - a.startedAt - a.totalPausedMs - pausedExtra);
-}
-
-function formatElapsed(ms: number) {
-  const s = Math.floor(ms / 1000);
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const sec = s % 60;
-  if (h > 0) return `${h}:${String(m).padStart(2,"0")}:${String(sec).padStart(2,"0")}`;
-  return `${String(m).padStart(2,"0")}:${String(sec).padStart(2,"0")}`;
-}
-
 function nextLabel(day: { exercises: { name: string; sets: { completed: boolean }[] }[] }, active: { exerciseIndex: number; setIndex: number }) {
   const ex = day.exercises[active.exerciseIndex];
   if (!ex) return "—";
@@ -520,7 +594,7 @@ function CtrlBtn({ children, onClick, "aria-label": ariaLabel, tone }: { childre
   );
 }
 
-function Stepper({
+const MemoStepper = memo(function Stepper({
   label, unit, value, onMinus, onPlus, tone,
 }: { label: string; unit: string; value: number; onMinus: () => void; onPlus: () => void; tone: "cyan" | "matrix" }) {
   const color = tone === "cyan" ? "text-cyan" : "text-matrix";
@@ -549,4 +623,4 @@ function Stepper({
       </div>
     </div>
   );
-}
+});

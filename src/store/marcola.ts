@@ -3,14 +3,16 @@ import { persist, createJSONStorage } from "zustand/middleware";
 import {
   saveRoutine,
   fetchRoutine,
-  pushWorkoutLog,
+  fetchRecentLogs,
   fetchInventory,
   fetchSchedule,
   setSupplementTaken,
   fetchWeeklyVolume as fetchWeeklyVolumeRemote,
+  type WorkoutLogRow,
 } from "@/lib/db";
 import { isSupabaseEnabled } from "@/lib/supabase";
 import { getLibraryExercise } from "@/lib/exercise-library";
+import { enqueueWorkoutLog } from "@/lib/sync-queue";
 
 /* ─────────────────────────────── Types ─────────────────────────────── */
 
@@ -89,6 +91,18 @@ export interface PRMedal {
   weight: number;
   reps: number;
 }
+
+export interface OverloadSuggestion {
+  weight: number;
+  reps: number;
+  deltaKg: number;
+  reason: "first-time" | "increase-load" | "increase-reps" | "hold";
+  label: string;
+}
+
+const COMPOUND_MUSCLES = new Set<MuscleId>([
+  "chest", "quads", "lats", "glutes", "hamstrings", "lower-back",
+]);
 
 export const WEEKDAY_LABELS = ["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SÁB"];
 export const WEEKDAY_LONG  = ["Domingo","Segunda","Terça","Quarta","Quinta","Sexta","Sábado"];
@@ -187,6 +201,8 @@ interface State {
   saturatedMap: Record<string, SaturationEntry>;
   ratingOverrides: Record<string, RatingOverride>;
   biometrics: Biometrics;
+  history: Record<string, WorkoutLogRow[]>;
+  seenSwipeHint: boolean;
 
   /* selectors */
   getActiveDay: () => WorkoutDay | null;
@@ -251,6 +267,12 @@ interface State {
   daysSinceWeightUpdate: () => number | null;
   needsWeightCalibration: () => boolean;
   getPRMedals: () => PRMedal[];
+
+  /* smart overload + ux */
+  loadHistory: () => Promise<void>;
+  getSuggestion: (exerciseId: string) => OverloadSuggestion | null;
+  adjustRestForRPE: (rpe: number) => void;
+  markSwipeHintSeen: () => void;
 }
 
 export const useMarcolaStore = create<State>()(
@@ -271,6 +293,8 @@ export const useMarcolaStore = create<State>()(
       saturatedMap: {},
       ratingOverrides: {},
       biometrics: { weightKg: null, heightCm: null, weightUpdatedAt: null },
+      history: {},
+      seenSwipeHint: false,
 
       getActiveDay: () => {
         const { routine, active } = get();
@@ -371,16 +395,11 @@ export const useMarcolaStore = create<State>()(
         set((st) => ({
           weeklyVolume: { ...st.weeklyVolume, [ex!.primary]: (st.weeklyVolume[ex!.primary] ?? 0) + 1 },
         }));
-        const ok = await pushWorkoutLog({
+        enqueueWorkoutLog({
           exercise_id: ex.id, exercise_name: ex.name, primary_muscle: ex.primary,
           set_index: 0, reps, weight, rpe: rpe ?? null, performed_at: new Date().toISOString(),
         });
-        if (!ok) {
-          set((st) => ({
-            weeklyVolume: { ...st.weeklyVolume, [ex!.primary]: Math.max(0, (st.weeklyVolume[ex!.primary] ?? 1) - 1) },
-          }));
-        }
-        return ok;
+        return true;
       },
 
       /* ──────────── Routine editing ──────────── */
@@ -654,16 +673,10 @@ export const useMarcolaStore = create<State>()(
         });
 
         if (!updatedSet.isWarmup) {
-          void pushWorkoutLog({
+          enqueueWorkoutLog({
             exercise_id: ex.id, exercise_name: ex.name, primary_muscle: ex.primary,
             set_index: setIdx, reps: updatedSet.reps, weight: updatedSet.weight,
             rpe: updatedSet.rpe ?? null, performed_at: new Date().toISOString(),
-          }).then((ok) => {
-            if (!ok) {
-              set((st) => ({
-                weeklyVolume: { ...st.weeklyVolume, [ex.primary]: Math.max(0, (st.weeklyVolume[ex.primary] ?? 1) - 1) },
-              }));
-            }
           });
         }
       },
@@ -771,6 +784,101 @@ export const useMarcolaStore = create<State>()(
         }
         return Array.from(best.values()).sort((a, b) => b.weight - a.weight);
       },
+
+      /* ──────────── Smart Overload + UX ──────────── */
+
+      loadHistory: async () => {
+        const logs = await fetchRecentLogs(200);
+        if (!logs.length) return;
+        const grouped: Record<string, WorkoutLogRow[]> = {};
+        for (const row of logs) {
+          (grouped[row.exercise_id] ??= []).push(row);
+        }
+        // pushWorkoutLog returns newest-first; ensure sort.
+        for (const k of Object.keys(grouped)) {
+          grouped[k].sort((a, b) => b.performed_at.localeCompare(a.performed_at));
+        }
+        set({ history: grouped });
+      },
+
+      getSuggestion: (exerciseId) => {
+        const { history, routine } = get();
+        let ex: Exercise | undefined;
+        for (const d of routine.days) {
+          const f = d.exercises.find((e) => e.id === exerciseId);
+          if (f) { ex = f; break; }
+        }
+        if (!ex) return null;
+        const target = ex.sets.find((s) => !s.isWarmup) ?? ex.sets[0];
+        if (!target) return null;
+
+        const logs = history[exerciseId] ?? [];
+        if (logs.length === 0) {
+          return {
+            weight: target.weight,
+            reps: target.reps,
+            deltaKg: 0,
+            reason: "first-time",
+            label: "plano base",
+          };
+        }
+
+        // Group by ISO date → top working set per session.
+        const byDate = new Map<string, { weight: number; reps: number }>();
+        for (const l of logs) {
+          const d = l.performed_at.slice(0, 10);
+          const top = byDate.get(d);
+          if (!top || l.weight > top.weight) byDate.set(d, { weight: l.weight, reps: l.reps });
+        }
+        const sessions = [...byDate.entries()]
+          .sort((a, b) => b[0].localeCompare(a[0]))
+          .slice(0, 2)
+          .map(([, v]) => v);
+        const last = sessions[0];
+
+        const inc = COMPOUND_MUSCLES.has(ex.primary) ? 2.5 : 1.25;
+        const hitTarget = sessions.length >= 2 && sessions.every((s) => s.reps >= target.reps);
+
+        if (hitTarget) {
+          return {
+            weight: +(last.weight + inc).toFixed(2),
+            reps: target.reps,
+            deltaKg: inc,
+            reason: "increase-load",
+            label: `+${inc}kg vs última`,
+          };
+        }
+        if (last.reps < target.reps) {
+          return {
+            weight: last.weight,
+            reps: last.reps + 1,
+            deltaKg: 0,
+            reason: "increase-reps",
+            label: "+1 rep vs última",
+          };
+        }
+        return {
+          weight: last.weight,
+          reps: target.reps,
+          deltaKg: 0,
+          reason: "hold",
+          label: "manter carga",
+        };
+      },
+
+      adjustRestForRPE: (rpe) => set((s) => {
+        if (!s.rest.active) return s;
+        let delta = 0;
+        if (rpe <= 7) delta = -15;
+        else if (rpe === 9) delta = 30;
+        else if (rpe >= 10) delta = 60;
+        if (delta === 0) return s;
+        const newTotal = Math.max(30, s.rest.total + delta);
+        const newRem = Math.max(5, s.rest.remaining + delta);
+        return { rest: { active: true, remaining: newRem, total: newTotal } };
+      }),
+
+      markSwipeHintSeen: () => set({ seenSwipeHint: true }),
     }),
     {
       name: "marcola-prime-store-v2",
@@ -785,6 +893,7 @@ export const useMarcolaStore = create<State>()(
         saturatedMap: s.saturatedMap,
         ratingOverrides: s.ratingOverrides,
         biometrics: s.biometrics,
+        seenSwipeHint: s.seenSwipeHint,
       }),
     },
   ),
