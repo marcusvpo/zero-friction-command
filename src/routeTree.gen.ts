@@ -13,6 +13,7 @@ import { Route as AppRouteImport } from './routes/_app'
 import { Route as AppIndexRouteImport } from './routes/_app.index'
 import { Route as AppWorkoutRouteImport } from './routes/_app.workout'
 import { Route as AppLogisticsRouteImport } from './routes/_app.logistics'
+import { Route as AppLibraryRouteImport } from './routes/_app.library'
 import { Route as AppBuilderRouteImport } from './routes/_app.builder'
 
 const AppRoute = AppRouteImport.update({
@@ -34,6 +35,11 @@ const AppLogisticsRoute = AppLogisticsRouteImport.update({
   path: '/logistics',
   getParentRoute: () => AppRoute,
 } as any)
+const AppLibraryRoute = AppLibraryRouteImport.update({
+  id: '/library',
+  path: '/library',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppBuilderRoute = AppBuilderRouteImport.update({
   id: '/builder',
   path: '/builder',
@@ -43,11 +49,13 @@ const AppBuilderRoute = AppBuilderRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
   '/builder': typeof AppBuilderRoute
+  '/library': typeof AppLibraryRoute
   '/logistics': typeof AppLogisticsRoute
   '/workout': typeof AppWorkoutRoute
 }
 export interface FileRoutesByTo {
   '/builder': typeof AppBuilderRoute
+  '/library': typeof AppLibraryRoute
   '/logistics': typeof AppLogisticsRoute
   '/workout': typeof AppWorkoutRoute
   '/': typeof AppIndexRoute
@@ -56,19 +64,21 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_app': typeof AppRouteWithChildren
   '/_app/builder': typeof AppBuilderRoute
+  '/_app/library': typeof AppLibraryRoute
   '/_app/logistics': typeof AppLogisticsRoute
   '/_app/workout': typeof AppWorkoutRoute
   '/_app/': typeof AppIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/builder' | '/logistics' | '/workout'
+  fullPaths: '/' | '/builder' | '/library' | '/logistics' | '/workout'
   fileRoutesByTo: FileRoutesByTo
-  to: '/builder' | '/logistics' | '/workout' | '/'
+  to: '/builder' | '/library' | '/logistics' | '/workout' | '/'
   id:
     | '__root__'
     | '/_app'
     | '/_app/builder'
+    | '/_app/library'
     | '/_app/logistics'
     | '/_app/workout'
     | '/_app/'
@@ -108,6 +118,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppLogisticsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/library': {
+      id: '/_app/library'
+      path: '/library'
+      fullPath: '/library'
+      preLoaderRoute: typeof AppLibraryRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/builder': {
       id: '/_app/builder'
       path: '/builder'
@@ -120,6 +137,7 @@ declare module '@tanstack/react-router' {
 
 interface AppRouteChildren {
   AppBuilderRoute: typeof AppBuilderRoute
+  AppLibraryRoute: typeof AppLibraryRoute
   AppLogisticsRoute: typeof AppLogisticsRoute
   AppWorkoutRoute: typeof AppWorkoutRoute
   AppIndexRoute: typeof AppIndexRoute
@@ -127,6 +145,7 @@ interface AppRouteChildren {
 
 const AppRouteChildren: AppRouteChildren = {
   AppBuilderRoute: AppBuilderRoute,
+  AppLibraryRoute: AppLibraryRoute,
   AppLogisticsRoute: AppLogisticsRoute,
   AppWorkoutRoute: AppWorkoutRoute,
   AppIndexRoute: AppIndexRoute,

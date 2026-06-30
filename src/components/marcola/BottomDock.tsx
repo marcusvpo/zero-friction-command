@@ -1,14 +1,14 @@
-import { LayoutDashboard, Dumbbell, Wrench, FlaskConical, Plus } from "lucide-react";
+import { LayoutDashboard, Dumbbell, Library, FlaskConical, Plus } from "lucide-react";
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { QuickLogSheet } from "./QuickLogDrawer";
 
 const items = [
-  { id: "dashboard", to: "/",          label: "Painel",    icon: LayoutDashboard },
-  { id: "workout",   to: "/workout",   label: "Treino",    icon: Dumbbell },
-  { id: "builder",   to: "/builder",   label: "Builder",   icon: Wrench },
-  { id: "logistics", to: "/logistics", label: "Logística", icon: FlaskConical },
+  { id: "dashboard", to: "/",          label: "Painel",     icon: LayoutDashboard },
+  { id: "workout",   to: "/workout",   label: "Treino",     icon: Dumbbell },
+  { id: "library",   to: "/library",   label: "Biblioteca", icon: Library },
+  { id: "logistics", to: "/logistics", label: "Logística",  icon: FlaskConical },
 ] as const;
 
 export function BottomDock() {

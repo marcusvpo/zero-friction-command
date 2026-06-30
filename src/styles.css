@@ -129,6 +129,13 @@
 @utility glow-matrix { text-shadow: 0 0 12px color-mix(in oklab, var(--matrix) 45%, transparent); }
 @utility glow-amber  { text-shadow: 0 0 12px color-mix(in oklab, var(--amber) 45%, transparent); }
 
+/* Hide scrollbars but keep scroll */
+@utility scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-none::-webkit-scrollbar { display: none; }
+
 /* Glass surfaces — the new primary container */
 @utility glass {
   background: color-mix(in oklab, white 4%, transparent);
