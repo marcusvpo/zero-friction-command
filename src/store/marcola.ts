@@ -43,6 +43,10 @@ export interface ActiveWorkout {
   log: { exerciseId: string; setIndex: number; weight: number; reps: number; ts: number }[];
 }
 export interface RestTimer { active: boolean; remaining: number; total: number; }
+export type WeekdayMap = Record<number, string | null>; // 0=Sun..6=Sat → dayId
+
+export const WEEKDAY_LABELS = ["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SÁB"];
+export const WEEKDAY_LONG  = ["Domingo","Segunda","Terça","Quarta","Quinta","Sexta","Sábado"];
 
 /* ───────────────────────── Seed Data (5-day split) ───────────────────────── */
 
@@ -115,8 +119,11 @@ const seedMuscleVolume: Record<MuscleId, number> = {
 
 /* ─────────────────────────────── Store ─────────────────────────────── */
 
+const seedWeekdayMap: WeekdayMap = { 0: null, 1: "d1", 2: "d2", 3: "d3", 4: "d4", 5: "d5", 6: null };
+
 interface State {
   routine: Routine;
+  weekdayMap: WeekdayMap;
   active: ActiveWorkout;
   rest: RestTimer;
   schedule: SupplementSlot[];
@@ -124,10 +131,12 @@ interface State {
   muscleVolume: Record<MuscleId, number>;
   syncStatus: "idle" | "syncing" | "ok" | "offline" | "error";
   lastSyncedAt: number | null;
+  lastWeekTonnage: number;
 
   /* selectors */
   getActiveDay: () => WorkoutDay | null;
   getActiveExercise: () => Exercise | null;
+  getTodayDay: () => WorkoutDay | null;
   getTonnage7d: () => number;
   getPRWatch: () => number;
   getAvgRest: () => number;
@@ -138,6 +147,8 @@ interface State {
   addExerciseToDay: (dayId: string) => void;
   removeExercise: (dayId: string, exerciseId: string) => void;
   renameExercise: (dayId: string, exerciseId: string, name: string) => void;
+  setSplit: (split: Routine["split"]) => void;
+  assignWeekday: (weekday: number, dayId: string | null) => void;
 
   startWorkout: (dayId: string) => void;
   finishWorkout: () => void;
@@ -145,6 +156,7 @@ interface State {
   nextExercise: () => void;
   prevExercise: () => void;
   selectExercise: (i: number) => void;
+  adjustCurrentSet: (field: "reps" | "weight", delta: number) => void;
   startRest: (seconds: number) => void;
   tickRest: () => void;
   skipRest: () => void;
@@ -157,6 +169,7 @@ export const useMarcolaStore = create<State>()(
   persist(
     (set, get) => ({
       routine: seedRoutine,
+      weekdayMap: seedWeekdayMap,
       active: { dayId: "d1", exerciseIndex: 0, setIndex: 0, startedAt: null, finishedAt: null, log: [] },
       rest: { active: false, remaining: 0, total: 0 },
       schedule: seedSchedule,
@@ -164,6 +177,7 @@ export const useMarcolaStore = create<State>()(
       muscleVolume: seedMuscleVolume,
       syncStatus: isSupabaseEnabled ? "idle" : "offline",
       lastSyncedAt: null,
+      lastWeekTonnage: 12.5,
 
       getActiveDay: () => {
         const { routine, active } = get();
@@ -173,6 +187,12 @@ export const useMarcolaStore = create<State>()(
         const day = get().getActiveDay();
         if (!day) return null;
         return day.exercises[get().active.exerciseIndex] ?? null;
+      },
+      getTodayDay: () => {
+        const { routine, weekdayMap } = get();
+        const dow = new Date().getDay();
+        const id = weekdayMap[dow];
+        return id ? routine.days.find((d) => d.id === id) ?? null : null;
       },
       getTonnage7d: () => {
         const r = get().routine; let total = 0;
@@ -250,6 +270,26 @@ export const useMarcolaStore = create<State>()(
           }),
         },
       })),
+
+      setSplit: (split) => set((s) => ({ routine: { ...s.routine, split } })),
+
+      assignWeekday: (weekday, dayId) => set((s) => ({ weekdayMap: { ...s.weekdayMap, [weekday]: dayId } })),
+
+      adjustCurrentSet: (field, delta) => set((s) => {
+        const day = s.getActiveDay(); if (!day) return s;
+        const exIdx = s.active.exerciseIndex;
+        const setIdx = s.active.setIndex;
+        const ex = day.exercises[exIdx]; if (!ex) return s;
+        const current = ex.sets[setIdx]; if (!current) return s;
+        const step = field === "weight" ? 2.5 : 1;
+        const nextVal = Math.max(0, +(current[field] + delta * step).toFixed(2));
+        const newDays = s.routine.days.map((d) => d.id !== day.id ? d : {
+          ...d, exercises: d.exercises.map((e, i) => i !== exIdx ? e : {
+            ...e, sets: e.sets.map((st, j) => j !== setIdx ? st : { ...st, [field]: nextVal }),
+          }),
+        });
+        return { routine: { ...s.routine, days: newDays } };
+      }),
 
       startWorkout: (dayId) => set({
         active: { dayId, exerciseIndex: 0, setIndex: 0, startedAt: Date.now(), finishedAt: null, log: [] },
@@ -339,6 +379,7 @@ export const useMarcolaStore = create<State>()(
       storage: createJSONStorage(() => (typeof window !== "undefined" ? window.localStorage : (undefined as never))),
       partialize: (s) => ({
         routine: s.routine,
+        weekdayMap: s.weekdayMap,
         schedule: s.schedule,
         inventory: s.inventory,
         muscleVolume: s.muscleVolume,
