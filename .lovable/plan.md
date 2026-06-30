@@ -1,95 +1,138 @@
-## Fase 7 — Fricção Zero (Terminal)
 
-Foco exclusivo no momento do treino. Score/Delta/Fadiga e PWA completo ficam pra Fase 8/9.
+# Phase 8 — Calibração Real do Operador
 
-### 1. Smart Overload (sugestão de progressão)
+Quatro frentes em paralelo: substituir telemetria fake por dados reais, zerar a base, blindar UI mobile, e plantar sua rotina real (PPL×2 + Legs quarta + abdômen ter/qui + esteira diária).
 
-**Comportamento**
-- Ao abrir um exercício no Terminal, o sistema calcula `suggestedWeight` e `suggestedReps` e mostra acima do stepper:
-  > `META · 82kg × 8` *(+2.5kg vs última)*
-- Botão CONFIRM SET fica **verde matrix pulsante** quando os valores atuais batem com a meta. Basta um toque.
-- Se o usuário ajustar manualmente, o "match" some e o botão volta ao gradiente padrão.
+---
 
-**Fonte dos dados (híbrida)**
-- Boot do Terminal: tenta `fetchRecentLogs(limit=200)` do Supabase (já existe em `src/lib/db.ts`). Cacheia no Zustand (`history: Record<exerciseId, LogRow[]>`).
-- Se offline ou sem dados remotos: cai pra `routine.days[*].exercises[*].sets` (último peso salvo na rotina).
-- Algoritmo:
-  - Pega top set não-warmup das **últimas 2 sessões** desse `exercise_id`.
-  - Se reps alcançadas ≥ alvo nas 2 sessões → sugere `+2.5kg` (compostos: chest/quads/lats/glutes/hamstrings) ou `+1.25kg` (isolados).
-  - Se reps abaixo do alvo → mantém peso, sugere `+1 rep`.
-  - Primeira vez (sem histórico) → usa o valor já planejado na rotina, sem badge.
+## 1. Telemetria real no TopTelemetryBar
 
-**Selector novo no store**
-- `getSuggestion(exerciseId) → { weight, reps, deltaKg, reason }`
-- `loadHistory()` chamado uma vez no mount do Terminal.
+Hoje mostra `142 BPM` e `842 KCAL` hardcoded — placeholder visual de Phase 1. Substituir por dois indicadores **derivados de dados reais** já no store:
 
-### 2. Swipes complementares no card de execução
+- **VOL · kg** — volume total da sessão ativa (Σ reps × peso de todos os sets confirmados hoje). Quando não há treino ativo, mostra volume da última sessão (label `VOL · 24H`).
+- **SETS · N** — número de sets confirmados hoje (ou na última sessão).
+- Quando há fila de sync pendente, o badge âmbar `↑ N pendentes` continua aparecendo no lugar do "SISTEMA · ONLINE" (já existe).
 
-**Gestos** (via Framer Motion `drag="x"` + threshold)
-- Swipe direita ≥ 80px → `completeCurrentSet()` (mesma ação do botão).
-- Swipe esquerda ≥ 80px → skip set (avança setIndex sem logar, marca `skipped: true` no log).
-- Haptic feedback via `navigator.vibrate(20)` quando disponível.
-- Indicadores laterais (✓ verde / ⤼ amber) aparecem com opacity proporcional ao drag, igual Tinder.
-- Botão CONFIRM SET **permanece** no rodapé do card — gestos são atalho, não substituto.
+Remove BPM/KCAL completamente — não temos sensor nem integração de wearable. Adicionar isso seria mentir para o operador.
 
-**Discovery**
-- Primeira visita ao Terminal: mini-hint 2s no topo do card: *"DESLIZE → CONFIRMAR · ← PULAR"*. Persiste flag `seenSwipeHint` no localStorage.
+Novo seletor no store: `getSessionTelemetry()` → `{ volumeKg, sets, isLive }`.
 
-### 3. Rest Timer adaptativo por RPE
+---
 
-**Regra**
-- Quando usuário registra RPE no post-set drawer:
-  - RPE ≤ 7 → reduz rest em 15s (mínimo 30s).
-  - RPE 8 → mantém base do exercício.
-  - RPE 9 → +30s.
-  - RPE 10 → +60s.
-- Toast informativo: *"Rest ajustado: 90s → 120s (RPE alto detectado)"*.
-- Implementação: ajusta `rest.remaining` e `rest.total` em tempo real ao salvar RPE.
+## 2. Wipe controlado dos dados de teste
 
-**Sem dependência de hardware** — só RPE manual. Frequência cardíaca fica pra fase futura quando integrarmos Health Connect / Apple Health.
+Adicionar ação **"ZERAR SISTEMA"** em `/operator` (botão discreto no rodapé do card de biométricos, com `AlertDialog` de confirmação dupla):
 
-### 4. Write-queue offline (camada base, sem Service Worker)
+- Limpa Zustand persist: `workout_logs`, `history cache`, `currentSession`, `PR medals`, `seenSwipeHint`, fila de sync.
+- Mantém: rotina, biométricos, supplements.
+- No Supabase (se autenticado): `delete from workout_logs where owner = auth.uid()` + `delete from pr_achievements where owner = auth.uid()`.
 
-**Objetivo**
-- Confirmar set funciona instantaneamente mesmo sem rede. Nada trava esperando Supabase.
+Variante "factory reset" (limpa tudo incluindo rotina/biométricos) fica explicitamente de fora — pediria outro botão e mais confirmação.
 
-**Implementação**
-- Novo arquivo `src/lib/sync-queue.ts`:
-  - Fila persistida em `localStorage` (`marcola-sync-queue`): `Array<{ id, type: "workout_log", payload, attempts, ts }>`.
-  - `enqueue(item)` — adiciona e dispara flush.
-  - `flush()` — itera fila, tenta `pushWorkoutLog`; em sucesso remove; em falha incrementa `attempts` (max 5, depois descarta com toast warning).
-  - Auto-flush em: `window.online` event, mount do app, e a cada 30s se houver itens.
-- Modifica `completeCurrentSet` em `marcola.ts`: troca `void pushWorkoutLog(...)` direto por `void enqueue({ type: "workout_log", payload })`.
-- Badge sutil no `TopTelemetryBar`: quando `queue.length > 0` mostra `↑ N pendentes` em amber.
+---
 
-**Sem PWA / Service Worker nesta fase.** Funciona enquanto a aba estiver aberta — cobre 95% do caso de academia (pessoa entra logada, treina, sai). PWA completo + background sync fica pra Fase 9 quando o app estiver maduro.
+## 3. Mobile polish (auditoria visual)
 
-### 5. Otimização de re-renders (escopo focado)
+Varredura nas telas críticas (`/`, `/workout`, `/library`, `/intel`, `/operator`, `/logistics`, `/builder`) aplicando o padrão obrigatório do design system:
 
-Só nas hot paths do Terminal pra não inflar o PR:
-- `RestTimer` extraído como componente isolado com `React.memo`, recebendo só `remaining`/`total` via props. Hoje o tick re-renderiza o `WorkoutConsole` inteiro.
-- Stepper PESO/REPS isolado com `memo` — só re-renderiza quando o valor muda.
-- Selector ticker da sessão (`elapsedLabel`) movido pra um componente filho `<SessionElapsedClock />` que tem seu próprio `setInterval`. Hoje o `useState(n => n+1)` força re-render de tudo.
+- Headers com texto + widget → `grid grid-cols-[minmax(0,1fr)_auto]` no mobile, `min-w-0` em containers de texto, `shrink-0` em ícones, `truncate` em títulos.
+- `TopTelemetryBar`: ajustar para não estourar quando `pending > 9` ou label longo (encolher gap, `font-mono-tactical text-[10px]` já está OK, falta `min-w-0`).
+- `BottomDock`: garantir 5 ícones com toque ≥44px e safe-area inset (`pb-[env(safe-area-inset-bottom)]`).
+- `WorkoutConsole` (Terminal): card de exercício com swipe não pode disparar scroll horizontal — confinar `overflow-x-hidden` no wrapper. Stepper PESO/REPS lado a lado precisa `grid-cols-2 gap-2` consistente.
+- `Operator` PR Medals: grid de 2 colunas em mobile já existe — validar truncate nos nomes longos.
+- `Intel` charts: forçar `ResponsiveContainer` com `aspect` em vez de altura fixa que estoura no 360px.
 
-### Mudanças nos arquivos
+Sem mudanças de layout/funcionalidade, só alinhamento + responsividade.
+
+---
+
+## 4. Calibração do operador + rotina real
+
+### 4.1 Biométricos
+Seed inicial via store: `weightKg: 76`, `heightCm: 178`. Aplicado uma única vez se ambos forem `null` após o wipe (não sobrescreve edições futuras).
+
+### 4.2 Rotina PPL×2 + Legs
+Substituir rotina default em `src/lib/exercise-library.ts` / `marcola.ts` pela sua atual. Split semanal:
 
 ```text
-src/lib/sync-queue.ts                    NEW
-src/store/marcola.ts                     +getSuggestion +loadHistory +history +adjustRestForRPE
-src/routes/_app.workout.tsx              swipe gestures, suggestion badge, smart-match CTA
-src/components/marcola/SessionClock.tsx  NEW (memo)
-src/components/marcola/RestTimerCard.tsx NEW (memo, extraído)
-src/components/marcola/Stepper.tsx       NEW (memo, extraído)
-src/components/marcola/TopTelemetryBar.tsx  +badge fila pendente
+SEG  PUSH A
+TER  PULL A   + ABS
+QUA  LEGS
+QUI  PUSH B   + ABS
+SEX  PULL B
+SAB  off / cardio
+DOM  off
 ```
 
-### Fora de escopo (próximas fases)
+(PUSH A/B e PULL A/B são a mesma lista de exercícios — a variação fica para o Smart Overload sugerir progressão a cada repetição da sessão.)
 
-- **Fase 8 — Visão de Comando**: Score 0-100, gráfico de Delta semanal, alerta de Fadiga Sistêmica preditiva.
-- **Fase 9 — Hardening**: PWA + Service Worker + background sync, geração automática de `Database` types do Supabase, memo profundo no Dashboard/Intel.
+**Esteira 15min · 6.5 km/h · 3–6% inclinação** entra como bloco fixo no final de **todos os treinos** (componente `CardioBlock` no fim do WorkoutConsole, não conta como exercício de série).
 
-### Riscos
+**Abdômen** entra como bloco opcional no fim de TER e QUI (3 exercícios curtos, default a definir; deixo placeholder `Prancha / Crunch cabo / Russian twist` com 3×10 e botão "trocar" via library).
 
-- Drag horizontal pode conflitar com scroll vertical do plan list — uso `drag="x"` com `dragDirectionLock` e threshold alto (80px) pra mitigar.
-- Smart Overload depende de `exercise_id` consistente entre sessões. Já está consistente no seed; risco baixo.
-- Fila offline pode ficar grande se usuário ficar muitos dias sem rede — cap em 500 itens com FIFO.
+### 4.3 Exercícios por dia (todos 3×8–10)
+
+**PUSH** (7):
+1. Supino reto máquina sentado (anilhas)
+2. Fly máquina (peck deck)
+3. Supino inclinado halteres
+4. Wide chest press máquina
+5. Desenvolvimento máquina (ombros)
+6. Tríceps corda polia
+7. Tríceps francês polia
+8. Tríceps press (tríceps testa máquina / supino fechado — confirmar variante na 1ª sessão)
+
+**PULL** (7):
+1. Lat pulldown pegada aberta
+2. Remada máquina (seated row)
+3. Lat pulldown pegada fechada
+4. Pulldown corda (face-pull alto / straight-arm — confirmar)
+5. Rosca corda polia
+6. Rosca scott
+7. Rosca barra W pegada invertida polia
+
+**LEGS** (6):
+1. Cadeira extensora
+2. Mesa flexora
+3. Leg press sentado (seated leg press)
+4. Desenvolvimento (entendido como **agachamento Smith / hack** — confirmar; se for ombros, sinalize)
+5. Elevação lateral (cabos / halteres)
+6. Remada alta polia baixa
+
+> **Ponto que preciso confirmar antes de codar (1 pergunta no fim do plano):** o "desenvolvimento" no Leg day é exercício de **perna** (hack squat / agachamento Smith) ou é mesmo **ombros** acoplado no leg? Já anotei como hack squat por padrão.
+
+Todos exercícios precisam existir em `exercise-library.ts` com `primaryMuscle` correto — alguns já estão (extensora, flexora, leg press, lat pulldown, remada, supino reto/inclinado, fly, elevação lateral, tríceps corda, rosca scott). Os que faltam serão adicionados com ícone+músculo (padrão definido na Phase 5: sem foto, só Lucide + heatmap).
+
+### 4.4 Volumes e crítica futura
+Smart Overload da Phase 7 já cuida de progressão. A **crítica de volume / nova divisão** (você pediu ajuda) fica para Phase 9 como um módulo "Coach Intel" em `/intel` — analisa sets/semana por grupo muscular vs MEV/MAV e sugere ajustes. Fora de escopo desta fase para não atrasar a calibração.
+
+---
+
+## Arquivos afetados
+
+- `src/store/marcola.ts` — `getSessionTelemetry`, `wipeData`, seed biométrico, nova `defaultRoutine` PPL×2.
+- `src/lib/exercise-library.ts` — adicionar exercícios faltantes (wide chest press, tríceps francês polia, tríceps press, pulldown corda, rosca W invertida polia, hack squat, seated leg press).
+- `src/components/marcola/TopTelemetryBar.tsx` — trocar BPM/KCAL por VOL/SETS reais.
+- `src/components/marcola/CardioBlock.tsx` *(novo)* — bloco 15min esteira no fim de cada treino.
+- `src/components/marcola/AbsBlock.tsx` *(novo)* — bloco abdômen ter/qui.
+- `src/routes/_app.workout.tsx` — montar CardioBlock + AbsBlock condicionais; overflow-x-hidden no card de swipe.
+- `src/routes/_app.operator.tsx` — botão "ZERAR SISTEMA" com AlertDialog.
+- `src/routes/_app.index.tsx`, `_app.intel.tsx`, `_app.library.tsx`, `_app.logistics.tsx`, `_app.builder.tsx` — auditoria mobile (grid/min-w-0/truncate/shrink-0).
+- `src/components/marcola/BottomDock.tsx` — safe-area inset.
+
+Nada toca Supabase schema (Phase 6 já cobriu). Wipe usa `delete` direto via client.
+
+---
+
+## Fora de escopo desta fase
+- Score 0–100 pós-treino
+- Delta chart 6 semanas
+- Coach Intel (crítica de divisão/volume)
+- PWA / Service Worker
+- Integração de wearable real para BPM/KCAL
+
+---
+
+## Pergunta antes de implementar
+
+Só uma: no **Leg day**, o "desenvolvimento" é **hack squat / agachamento Smith** (perna) ou é mesmo **desenvolvimento de ombros** que você intercala no leg? Default que vou usar se você não responder: **hack squat**.
