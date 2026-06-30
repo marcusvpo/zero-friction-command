@@ -377,7 +377,6 @@ export const useMarcolaStore = create<State>()(
                 restSeconds: lib.defaultRestSeconds,
                 tempo: lib.defaultTempo,
                 libraryId: lib.id,
-                image: lib.image,
                 sets: [mkSet(10, 0), mkSet(10, 0), mkSet(10, 0)],
               }],
             }),
