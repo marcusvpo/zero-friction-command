@@ -9,13 +9,18 @@ import { useMarcolaStore } from "@/store/marcola";
  */
 export function TopTelemetryBar() {
   const [pending, setPending] = useState(0);
-  // Re-render leve: getSessionTelemetry é selector estável quando active/log/lastSummary não mudam.
-  const telemetry = useMarcolaStore((s) => s.getSessionTelemetry());
+  // Subscribe to primitives so React/Zustand can compare with Object.is.
+  // Calling getSessionTelemetry() directly inside a selector returns a fresh
+  // object every render → infinite update loop.
+  const volumeKg = useMarcolaStore((s) => s.getSessionTelemetry().volumeKg);
+  const sets = useMarcolaStore((s) => s.getSessionTelemetry().sets);
+  const isLive = useMarcolaStore((s) => s.getSessionTelemetry().isLive);
 
   useEffect(() => subscribeQueue(setPending), []);
 
-  const volLabel = telemetry.isLive ? "VOL · SESSÃO" : "VOL · ÚLTIMO";
-  const setsLabel = telemetry.isLive ? "SETS · LIVE" : "SETS · ÚLTIMO";
+  const volLabel = isLive ? "VOL · SESSÃO" : "VOL · ÚLTIMO";
+  const setsLabel = isLive ? "SETS · LIVE" : "SETS · ÚLTIMO";
+
 
   return (
     <header className="sticky top-0 z-30 px-4 pt-6 pb-4">
@@ -34,7 +39,7 @@ export function TopTelemetryBar() {
             </span>
           ) : (
             <span className="font-mono-tactical truncate text-[10px] tracking-[0.18em] text-muted-foreground/80">
-              {telemetry.isLive ? "SESSÃO · LIVE" : "SISTEMA · ONLINE"}
+              {isLive ? "SESSÃO · LIVE" : "SISTEMA · ONLINE"}
             </span>
           )}
         </div>
@@ -42,18 +47,19 @@ export function TopTelemetryBar() {
         <div className="flex shrink-0 items-center gap-3">
           <Telemetry
             icon={Dumbbell}
-            value={telemetry.volumeKg > 0 ? telemetry.volumeKg.toLocaleString("pt-BR") : "—"}
+            value={volumeKg > 0 ? volumeKg.toLocaleString("pt-BR") : "—"}
             unit="KG"
             label={volLabel}
-            tone={telemetry.isLive ? "text-matrix" : "text-cyan"}
+            tone={isLive ? "text-matrix" : "text-cyan"}
           />
           <Telemetry
             icon={Layers}
-            value={telemetry.sets > 0 ? String(telemetry.sets) : "—"}
+            value={sets > 0 ? String(sets) : "—"}
             unit="N"
             label={setsLabel}
             tone="text-amber"
           />
+
         </div>
       </div>
     </header>
