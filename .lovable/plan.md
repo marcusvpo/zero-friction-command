@@ -1,32 +1,106 @@
-# Phase 5: Marcola Prime — Persistence, State Machine, Heatmap, PWA
 
-## 1. Supabase Persistence (Zustand binding)
-- Refactor `src/store/marcola.ts` to remove mock arrays and expose async actions backed by the existing `src/lib/supabase.ts` client:
-  - `fetchTodayWorkout()` — reads today's routine + exercises for `auth.uid()`.
-  - `logCompletedSet(exerciseId, weight, reps)` — optimistic update of local `completedSets`, then `insert` into `workout_logs`; rollback + toast on error.
-  - `fetchWeeklyVolume()` — aggregates sets per muscle group from `workout_logs` for the trailing 7 days, returns `Record<MuscleKey, number>`.
-- Subscribe `WorkoutConsole` and `AnatomyHeatmap` to these slices via selectors so the UI re-renders instantly on optimistic writes.
+# Phase 6 — Workout 360º + Exercise Library
 
-## 2. Zero-Friction Workout State Machine (`WorkoutConsole.tsx`)
-- Single-exercise, single-set view driven by a reducer with states: `ACTIVE_SET → SAVING → RESTING → NEXT_SET | NEXT_EXERCISE | WORKOUT_COMPLETE`.
-- Large `+ / −` steppers for weight (±2.5 kg) and reps (±1); no keyboard input required.
-- `CONFIRM SET` flow: dispatch `SAVING` → call `logCompletedSet` → on success switch to `<RestTimer />`; on timer end or skip → auto-increment set index, or advance to next exercise when all sets are done, or finalize the workout.
+## 1. Desligar DEBUG_MODE do heatmap
+- `src/components/marcola/AnatomyHeatmap.tsx`: flip `DEBUG_MODE = false`. Remover stroke vermelho residual.
 
-## 3. Heatmap Alignment & Data Binding (`AnatomyHeatmap.tsx`)
-- Wrap image + SVG in a `position: relative` container with locked `aspect-ratio` matching `anatomical-body.png` intrinsic size; both layers `position: absolute; inset: 0; width/height: 100%`.
-- `<img>` uses `object-fit: contain`; `<svg>` uses matching `viewBox="0 0 <W> <H>"` and `preserveAspectRatio="xMidYMid meet"`.
-- Extract all muscle polygons/paths into a top-of-file `MUSCLE_PATHS` config with a TODO comment for coordinate tweaking.
-- Add `DEBUG_MODE = true` flag that renders all masks with `stroke: red; stroke-width: 2; fill: transparent` so misalignment is visible.
-- Bind `fill` / `opacity` to `fetchWeeklyVolume()` output: 0 sets → transparent; 1–4 → low-opacity cyan; 5–8 → medium; >8 → `rgba(0,240,255,0.8)`.
+## 2. /workout — enquadramento e UX
 
-## 4. PWA Initialization
-- Add `vite-plugin-pwa` (installable, no offline caching beyond defaults — per project no-SW guidance, but user explicitly requested PWA so we ship a guarded `autoUpdate` SW with the standard preview/iframe registration guard wrapper).
-- `manifest.webmanifest` with name "Marcola Prime", `display: standalone`, theme/background colors matching the dark UI, and icon set under `public/`.
-- Link manifest + theme-color + apple-touch-icon in `index.html` (or `__root.tsx` head if TanStack).
+Problema atual: o botão fixo `CONFIRM SET` (bottom-24) sobrepõe a lista de exercícios em viewports curtos; o dock inferior + alturas fixas estouram em telas pequenas; o "ENCERRAR" some quando o cartão de set é muito alto.
 
-## Open questions before I build
-1. **Intrinsic pixel size of `public/anatomical-body.png`?** Needed for the SVG `viewBox`. I'll inspect the file on disk; if it's missing or low-res, I'll flag it.
-2. **Muscle coordinate source.** Current `MUSCLE_PATHS` will be best-effort placeholders aligned with the existing image; you'll fine-tune via the DEBUG_MODE overlay. Confirm that's acceptable.
-3. **PWA icons.** OK to generate a simple cyan-on-black "M" icon set (192/512/maskable) with the image tool, or do you want to supply art?
+Mudanças em `src/routes/_app.workout.tsx`:
+- Trocar layout principal por flex column com `h-[100dvh] overflow-hidden` e seções com `min-h-0` + `overflow-auto` apenas onde necessário (lista de exercícios).
+- Mover o CTA `CONFIRM SET` para dentro do cartão (não mais `fixed`), garantindo que nunca colida com o BottomDock; sticky-bottom dentro do cartão com safe-area-inset-bottom.
+- Day-selector strip vira `grid grid-cols-5` em ≥sm e scroll horizontal só em mobile estreito.
+- Stepper: reduzir altura mínima para caber em 667px de altura; fonte do valor em `clamp(2rem, 8vw, 3rem)`.
+- Lista de exercícios compacta com altura máxima dinâmica `max-h-[min(40vh,18rem)]`.
+- Novo header tático com cronômetro total de sessão + status (ATIVO / PAUSADO).
 
-I'll proceed with the build once you confirm — especially on the PWA icon question.
+Novos controles de sessão (botões no header da tela):
+- **Pausar / Retomar**: pausa cronômetro total e bloqueia CONFIRM SET. Adiciona `pausedAt` e `totalPausedMs` em `ActiveWorkout`.
+- **Salvar rascunho**: persiste `active` no Supabase (tabela `workout_drafts`, 1 por usuário). Ao abrir /workout, oferece "Continuar sessão de X min atrás".
+- **Descartar**: confirm dialog destrutivo, limpa `active` + draft.
+- **Finalizar com resumo**: modal com tonelagem total, PRs batidos (peso > maior peso anterior do exercício), duração líquida (descontando pausas), sets completos. Salva sessão fechada em `workout_sessions`.
+
+## 3. Cadastro de set/exercício — campos novos
+
+`Exercise` (em `src/store/marcola.ts`) ganha:
+- `tempo?: string` (ex: "3-1-1-0")
+- `targetRPE?: number`
+- `notes?: string` (já existe)
+
+`ExerciseSet` ganha:
+- `isWarmup?: boolean` (não conta tonelagem nem volume semanal)
+- `restSeconds?: number` (override por set; cai pro `exercise.restSeconds` quando vazio)
+- `notes?: string`
+- `rpe?: number` (já existe — agora captado no CONFIRM SET)
+
+UI:
+- Drawer "Configurar set" (long-press no stepper ou ícone ⋮): edita rest, marca warm-up, RPE alvo.
+- Após CONFIRM SET, drawer rápido opcional para RPE real (1–10) + nota; auto-dispensa em 2s se ignorado.
+- Builder (`/builder`): editor de exercício com tempo, RPE alvo, descanso, sets warm-up.
+
+## 4. Biblioteca de Exercícios
+
+### Dados
+Novo arquivo `src/lib/exercise-library.ts` com ~30 exercícios canônicos cobrindo os 5 dias do split atual + clássicos por grupo. Cada item:
+```ts
+{ id, name, primary: MuscleId, secondary[], equipment: "barbell"|"dumbbell"|"cable"|"machine"|"bodyweight",
+  difficulty: 1|2|3, instructions: string[], imageUrl: string }
+```
+
+### Imagens (IA, estilo neon anatômico)
+Gerar ~30 imagens 1024×1024 via `imagegen--generate_image` (premium para legibilidade do gesto), prompt-base consistente: silhueta humana wireframe ciano sobre fundo preto, halteres/barras em neon verde matrix, traços táticos, sem texto. Upload para CDN via `lovable-assets create`, salvar pointers em `src/assets/library/<id>.png.asset.json`. Importar no array.
+
+### Tela `/library` (`src/routes/_app.library.tsx`)
+- Grid 2 col mobile / 4 col desktop.
+- Filtros chip: grupo muscular (15 botões), equipamento (5 chips), busca por nome.
+- Card: imagem + nome + músculo primário + chips de secundários.
+- Tap → bottom-sheet com imagem grande, instruções passo-a-passo, e dois CTAs:
+  - **Adicionar ao dia →** picker D1/D2/D3/D4/D5 → cria Exercise com `restSeconds`, `tempo` padrão do template, 3 sets default.
+  - **Substituir exercício atual** (só visível se vier de /workout via state) → swap mantendo histórico de sets.
+
+### Integração com /workout
+- Botão "Trocar exercício" no header do cartão → navega para /library com `?swap=<exerciseId>&day=<dayId>`.
+- Botão "+ Adicionar" no fim da lista de exercícios do dia → /library.
+
+## 5. Persistência Supabase
+
+Migrações novas (após aprovação do plano):
+- `workout_drafts` (owner uuid PK, payload jsonb, updated_at) — RLS por owner.
+- `workout_sessions` (id, owner, day_id, started_at, finished_at, total_paused_ms, tonnage_kg, prs jsonb, sets_completed int) — RLS por owner.
+- Não é preciso tabela para a biblioteca: dados estáticos no bundle.
+
+Store (`src/store/marcola.ts`):
+- `pauseSession()`, `resumeSession()`, `saveDraft()`, `loadDraft()`, `discardSession()`, `finishWorkoutWithSummary(): SummaryStats`.
+- `getElapsedMs()`: `now - startedAt - totalPausedMs - (pausedAt? now-pausedAt:0)`.
+- `swapExercise(dayId, exerciseId, fromLibraryId)`.
+- `addLibraryExerciseToDay(dayId, libraryId)`.
+
+## Arquivos tocados
+- `src/components/marcola/AnatomyHeatmap.tsx` (debug off)
+- `src/routes/_app.workout.tsx` (relayout + controles + drawers)
+- `src/routes/_app.library.tsx` (novo)
+- `src/routes/_app.builder.tsx` (campos extras)
+- `src/components/marcola/SetConfigDrawer.tsx` (novo)
+- `src/components/marcola/SessionSummaryModal.tsx` (novo)
+- `src/components/marcola/BottomDock.tsx` (link Library)
+- `src/store/marcola.ts` (state machine + drafts + summary)
+- `src/lib/exercise-library.ts` (novo)
+- `src/lib/db.ts` (drafts + sessions)
+- `src/assets/library/*.png.asset.json` (~30 pointers)
+- `supabase/marcola_schema.sql` (drafts + sessions + grants + RLS)
+
+## Ordem de execução
+1. Migração Supabase (drafts + sessions).
+2. Store: novos campos + actions + cronômetro pausável.
+3. Tipos `Exercise`/`ExerciseSet` estendidos sem quebrar seeds.
+4. /workout relayout + controles de sessão + summary modal.
+5. SetConfigDrawer + captura de RPE real.
+6. Biblioteca: gerar imagens IA (lote), upload assets, dados, tela /library, integração swap/add.
+7. Builder: campos extras (tempo, warm-up, RPE alvo).
+8. DEBUG_MODE = false.
+
+## Confirmações necessárias antes de implementar
+- OK gerar ~30 imagens em modo **premium** (~30 créditos)? Posso reduzir pra 15 cobrindo só os exercícios do split atual + 5 extras por grupo se preferir economia.
+- OK criar tabelas `workout_drafts` e `workout_sessions` no Supabase existente (mesmo schema/usuário)?

@@ -5,12 +5,12 @@ import {
   fetchRoutine,
   pushWorkoutLog,
   fetchInventory,
-  upsertInventory,
   fetchSchedule,
   setSupplementTaken,
   fetchWeeklyVolume as fetchWeeklyVolumeRemote,
 } from "@/lib/db";
 import { isSupabaseEnabled } from "@/lib/supabase";
+import { getLibraryExercise } from "@/lib/exercise-library";
 
 /* ─────────────────────────────── Types ─────────────────────────────── */
 
@@ -21,10 +21,24 @@ export type MuscleId =
 
 export type Tone = "cyan" | "matrix" | "amber" | "danger";
 
-export interface ExerciseSet { reps: number; weight: number; rpe?: number; completed: boolean; }
+export interface ExerciseSet {
+  reps: number;
+  weight: number;
+  rpe?: number;
+  completed: boolean;
+  /** Marks warm-up set: excluded from tonelagem & weekly volume. */
+  isWarmup?: boolean;
+  /** Per-set rest override (fallback: exercise.restSeconds). */
+  restSeconds?: number;
+  notes?: string;
+}
 export interface Exercise {
   id: string; name: string; primary: MuscleId; secondary?: MuscleId[];
-  sets: ExerciseSet[]; restSeconds: number; tempo?: string; notes?: string;
+  sets: ExerciseSet[]; restSeconds: number;
+  tempo?: string; targetRPE?: number; notes?: string;
+  /** Optional pointer to the library entry this exercise came from. */
+  libraryId?: string;
+  image?: string;
 }
 export interface WorkoutDay {
   id: string; code: string; name: string; focus: string; exercises: Exercise[];
@@ -41,10 +55,21 @@ export interface InventoryItem {
 export interface ActiveWorkout {
   dayId: string | null; exerciseIndex: number; setIndex: number;
   startedAt: number | null; finishedAt: number | null;
-  log: { exerciseId: string; setIndex: number; weight: number; reps: number; ts: number }[];
+  /** When set, session is paused. Resume() adds (now - pausedAt) to totalPausedMs. */
+  pausedAt: number | null;
+  totalPausedMs: number;
+  log: { exerciseId: string; setIndex: number; weight: number; reps: number; ts: number; isWarmup?: boolean }[];
 }
 export interface RestTimer { active: boolean; remaining: number; total: number; }
-export type WeekdayMap = Record<number, string | null>; // 0=Sun..6=Sat → dayId
+export type WeekdayMap = Record<number, string | null>;
+
+export interface SessionSummary {
+  durationMs: number;
+  tonnageKg: number;
+  setsCompleted: number;
+  warmupSets: number;
+  prs: { exerciseId: string; exerciseName: string; weight: number; reps: number }[];
+}
 
 export const WEEKDAY_LABELS = ["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SÁB"];
 export const WEEKDAY_LONG  = ["Domingo","Segunda","Terça","Quarta","Quinta","Sexta","Sábado"];
@@ -58,27 +83,27 @@ const seedRoutine: Routine = {
   days: [
     { id: "d1", code: "D1", name: "PUSH", focus: "Peito · Ombros · Tríceps",
       exercises: [
-        { id: "e1", name: "Supino Reto Barra", primary: "chest", secondary: ["shoulders","triceps"], restSeconds: 120, sets: [mkSet(8,100),mkSet(8,100),mkSet(6,110),mkSet(6,110)] },
-        { id: "e2", name: "Supino Inclinado Halter", primary: "chest", secondary: ["shoulders"], restSeconds: 90, sets: [mkSet(10,32),mkSet(10,32),mkSet(8,34)] },
-        { id: "e3", name: "Desenvolvimento Militar", primary: "shoulders", secondary: ["triceps"], restSeconds: 90, sets: [mkSet(8,50),mkSet(8,50),mkSet(6,55)] },
-        { id: "e4", name: "Elevação Lateral", primary: "shoulders", restSeconds: 60, sets: [mkSet(12,14),mkSet(12,14),mkSet(10,16)] },
-        { id: "e5", name: "Tríceps Corda", primary: "triceps", restSeconds: 60, sets: [mkSet(12,28),mkSet(12,28),mkSet(10,32)] },
+        { id: "e1", name: "Supino Reto Barra", primary: "chest", secondary: ["shoulders","triceps"], restSeconds: 120, tempo: "3-1-1-0", libraryId: "lib-supino-reto", sets: [mkSet(8,100),mkSet(8,100),mkSet(6,110),mkSet(6,110)] },
+        { id: "e2", name: "Supino Inclinado Halter", primary: "chest", secondary: ["shoulders"], restSeconds: 90, tempo: "3-1-1-0", libraryId: "lib-supino-inclinado-halter", sets: [mkSet(10,32),mkSet(10,32),mkSet(8,34)] },
+        { id: "e3", name: "Desenvolvimento Militar", primary: "shoulders", secondary: ["triceps"], restSeconds: 90, tempo: "2-1-1-0", libraryId: "lib-desenvolvimento", sets: [mkSet(8,50),mkSet(8,50),mkSet(6,55)] },
+        { id: "e4", name: "Elevação Lateral", primary: "shoulders", restSeconds: 60, tempo: "2-0-2-1", libraryId: "lib-elevacao-lateral", sets: [mkSet(12,14),mkSet(12,14),mkSet(10,16)] },
+        { id: "e5", name: "Tríceps Corda", primary: "triceps", restSeconds: 60, tempo: "2-1-2-0", libraryId: "lib-triceps-corda", sets: [mkSet(12,28),mkSet(12,28),mkSet(10,32)] },
       ] },
     { id: "d2", code: "D2", name: "PULL", focus: "Costas · Bíceps · Antebraço",
       exercises: [
-        { id: "p1", name: "Barra Fixa Pronada", primary: "lats", secondary: ["biceps"], restSeconds: 120, sets: [mkSet(8,0),mkSet(8,0),mkSet(6,10)] },
-        { id: "p2", name: "Remada Curvada", primary: "lats", secondary: ["traps","biceps"], restSeconds: 120, sets: [mkSet(8,80),mkSet(8,80),mkSet(6,90)] },
+        { id: "p1", name: "Barra Fixa Pronada", primary: "lats", secondary: ["biceps"], restSeconds: 120, tempo: "2-0-3-1", libraryId: "lib-barra-fixa", sets: [mkSet(8,0),mkSet(8,0),mkSet(6,10)] },
+        { id: "p2", name: "Remada Curvada", primary: "lats", secondary: ["traps","biceps"], restSeconds: 120, tempo: "2-1-2-0", libraryId: "lib-remada-curvada", sets: [mkSet(8,80),mkSet(8,80),mkSet(6,90)] },
         { id: "p3", name: "Puxada Frontal", primary: "lats", restSeconds: 90, sets: [mkSet(10,70),mkSet(10,70),mkSet(8,75)] },
-        { id: "p4", name: "Rosca Direta Barra W", primary: "biceps", restSeconds: 75, sets: [mkSet(10,30),mkSet(10,30),mkSet(8,32)] },
+        { id: "p4", name: "Rosca Direta Barra W", primary: "biceps", restSeconds: 75, tempo: "2-1-2-0", libraryId: "lib-rosca-direta", sets: [mkSet(10,30),mkSet(10,30),mkSet(8,32)] },
         { id: "p5", name: "Martelo", primary: "biceps", secondary: ["forearms"], restSeconds: 60, sets: [mkSet(12,18),mkSet(12,18)] },
       ] },
     { id: "d3", code: "D3", name: "LEGS", focus: "Quadríceps · Posterior · Glúteo",
       exercises: [
-        { id: "l1", name: "Agachamento Livre", primary: "quads", secondary: ["glutes","core","lower-back"], restSeconds: 180, sets: [mkSet(8,120),mkSet(8,120),mkSet(6,140),mkSet(6,140)] },
-        { id: "l2", name: "Leg Press 45°", primary: "quads", secondary: ["glutes"], restSeconds: 120, sets: [mkSet(12,240),mkSet(12,240),mkSet(10,280)] },
-        { id: "l3", name: "Stiff", primary: "hamstrings", secondary: ["glutes","lower-back"], restSeconds: 120, sets: [mkSet(10,90),mkSet(10,90),mkSet(8,100)] },
+        { id: "l1", name: "Agachamento Livre", primary: "quads", secondary: ["glutes","core","lower-back"], restSeconds: 180, tempo: "3-1-1-0", libraryId: "lib-agachamento", sets: [mkSet(8,120),mkSet(8,120),mkSet(6,140),mkSet(6,140)] },
+        { id: "l2", name: "Leg Press 45°", primary: "quads", secondary: ["glutes"], restSeconds: 120, tempo: "2-1-2-0", libraryId: "lib-leg-press", sets: [mkSet(12,240),mkSet(12,240),mkSet(10,280)] },
+        { id: "l3", name: "Stiff", primary: "hamstrings", secondary: ["glutes","lower-back"], restSeconds: 120, tempo: "3-1-1-0", libraryId: "lib-stiff", sets: [mkSet(10,90),mkSet(10,90),mkSet(8,100)] },
         { id: "l4", name: "Cadeira Flexora", primary: "hamstrings", restSeconds: 75, sets: [mkSet(12,60),mkSet(12,60)] },
-        { id: "l5", name: "Panturrilha em Pé", primary: "calves", restSeconds: 60, sets: [mkSet(15,120),mkSet(15,120),mkSet(12,140)] },
+        { id: "l5", name: "Panturrilha em Pé", primary: "calves", restSeconds: 60, tempo: "2-1-3-1", libraryId: "lib-panturrilha", sets: [mkSet(15,120),mkSet(15,120),mkSet(12,140)] },
       ] },
     { id: "d4", code: "D4", name: "UPPER", focus: "Torso completo · Densidade",
       exercises: [
@@ -118,9 +143,14 @@ const seedMuscleVolume: Record<MuscleId, number> = {
   calves: 0.44, lats: 0.78, traps: 0.46, "lower-back": 0.31, neck: 0.0,
 };
 
-/* ─────────────────────────────── Store ─────────────────────────────── */
-
 const seedWeekdayMap: WeekdayMap = { 0: null, 1: "d1", 2: "d2", 3: "d3", 4: "d4", 5: "d5", 6: null };
+
+const emptyActive: ActiveWorkout = {
+  dayId: "d1", exerciseIndex: 0, setIndex: 0,
+  startedAt: null, finishedAt: null, pausedAt: null, totalPausedMs: 0, log: [],
+};
+
+/* ─────────────────────────────── Store ─────────────────────────────── */
 
 interface State {
   routine: Routine;
@@ -130,11 +160,11 @@ interface State {
   schedule: SupplementSlot[];
   inventory: InventoryItem[];
   muscleVolume: Record<MuscleId, number>;
-  /** Completed sets per primary muscle over the trailing 7 days (live from Supabase). */
   weeklyVolume: Record<MuscleId, number>;
   syncStatus: "idle" | "syncing" | "ok" | "offline" | "error";
   lastSyncedAt: number | null;
   lastWeekTonnage: number;
+  lastSummary: SessionSummary | null;
 
   /* selectors */
   getActiveDay: () => WorkoutDay | null;
@@ -143,26 +173,44 @@ interface State {
   getTonnage7d: () => number;
   getPRWatch: () => number;
   getAvgRest: () => number;
+  getElapsedMs: () => number;
+  isPaused: () => boolean;
+  hasActiveSession: () => boolean;
 
-  /* actions */
+  /* cloud */
   hydrateFromCloud: () => Promise<void>;
   fetchTodayWorkout: () => Promise<WorkoutDay | null>;
   fetchWeeklyVolume: () => Promise<Record<MuscleId, number>>;
   logCompletedSet: (exerciseId: string, weight: number, reps: number, rpe?: number) => Promise<boolean>;
   persistRoutine: () => Promise<boolean>;
+
+  /* routine editing */
   addExerciseToDay: (dayId: string) => void;
+  addLibraryExerciseToDay: (dayId: string, libraryId: string) => void;
+  swapExercise: (dayId: string, exerciseId: string, libraryId: string) => void;
   removeExercise: (dayId: string, exerciseId: string) => void;
   renameExercise: (dayId: string, exerciseId: string, name: string) => void;
+  updateExercise: (dayId: string, exerciseId: string, patch: Partial<Exercise>) => void;
   setSplit: (split: Routine["split"]) => void;
   assignWeekday: (weekday: number, dayId: string | null) => void;
 
+  /* session control */
   startWorkout: (dayId: string) => void;
-  finishWorkout: () => void;
-  completeCurrentSet: (overrides?: { reps?: number; weight?: number; rpe?: number }) => Promise<void>;
+  pauseSession: () => void;
+  resumeSession: () => void;
+  discardSession: () => void;
+  finishWorkout: () => SessionSummary;
+  clearSummary: () => void;
+
+  /* set execution */
+  completeCurrentSet: (overrides?: { reps?: number; weight?: number; rpe?: number; notes?: string }) => Promise<void>;
   nextExercise: () => void;
   prevExercise: () => void;
   selectExercise: (i: number) => void;
   adjustCurrentSet: (field: "reps" | "weight", delta: number) => void;
+  toggleWarmup: (exerciseId: string, setIndex: number) => void;
+  setSetRest: (exerciseId: string, setIndex: number, seconds: number | undefined) => void;
+
   startRest: (seconds: number) => void;
   tickRest: () => void;
   skipRest: () => void;
@@ -176,7 +224,7 @@ export const useMarcolaStore = create<State>()(
     (set, get) => ({
       routine: seedRoutine,
       weekdayMap: seedWeekdayMap,
-      active: { dayId: "d1", exerciseIndex: 0, setIndex: 0, startedAt: null, finishedAt: null, log: [] },
+      active: emptyActive,
       rest: { active: false, remaining: 0, total: 0 },
       schedule: seedSchedule,
       inventory: seedInventory,
@@ -185,6 +233,7 @@ export const useMarcolaStore = create<State>()(
       syncStatus: isSupabaseEnabled ? "idle" : "offline",
       lastSyncedAt: null,
       lastWeekTonnage: 12.5,
+      lastSummary: null,
 
       getActiveDay: () => {
         const { routine, active } = get();
@@ -203,7 +252,10 @@ export const useMarcolaStore = create<State>()(
       },
       getTonnage7d: () => {
         const r = get().routine; let total = 0;
-        for (const day of r.days) for (const ex of day.exercises) for (const s of ex.sets) total += s.reps * s.weight;
+        for (const day of r.days) for (const ex of day.exercises) for (const s of ex.sets) {
+          if (s.isWarmup) continue;
+          total += s.reps * s.weight;
+        }
         return Math.round(total / 100) / 10;
       },
       getPRWatch: () => {
@@ -219,8 +271,20 @@ export const useMarcolaStore = create<State>()(
         for (const day of r.days) for (const ex of day.exercises) { sum += ex.restSeconds; n++; }
         return n ? Math.round(sum / n) : 0;
       },
+      getElapsedMs: () => {
+        const a = get().active;
+        if (!a.startedAt) return 0;
+        const end = a.finishedAt ?? Date.now();
+        const pausedExtra = a.pausedAt ? Date.now() - a.pausedAt : 0;
+        return Math.max(0, end - a.startedAt - a.totalPausedMs - pausedExtra);
+      },
+      isPaused: () => get().active.pausedAt !== null,
+      hasActiveSession: () => {
+        const a = get().active;
+        return a.startedAt !== null && a.finishedAt === null;
+      },
 
-      /* ──────────── Cloud hydration / sync ──────────── */
+      /* ──────────── Cloud hydration ──────────── */
 
       hydrateFromCloud: async () => {
         if (!isSupabaseEnabled) { set({ syncStatus: "offline" }); return; }
@@ -247,28 +311,18 @@ export const useMarcolaStore = create<State>()(
         return ok;
       },
 
-      /* ──────────── Phase 5 public API ──────────── */
-
-      /** Returns today's scheduled WorkoutDay (based on weekdayMap). Re-hydrates routine from cloud if needed. */
       fetchTodayWorkout: async () => {
         const s = get();
-        if (isSupabaseEnabled && !s.lastSyncedAt) {
-          await s.hydrateFromCloud();
-        }
+        if (isSupabaseEnabled && !s.lastSyncedAt) await s.hydrateFromCloud();
         return get().getTodayDay();
       },
 
-      /** Pulls trailing-7-day completed sets per primary muscle from Supabase. */
       fetchWeeklyVolume: async () => {
         const vol = await fetchWeeklyVolumeRemote();
         set({ weeklyVolume: vol });
         return vol;
       },
 
-      /**
-       * Optimistic write of a single completed set to Supabase `workout_logs`.
-       * Returns false if the cloud write failed (UI already updated).
-       */
       logCompletedSet: async (exerciseId, weight, reps, rpe) => {
         const s = get();
         let ex: Exercise | undefined;
@@ -277,37 +331,22 @@ export const useMarcolaStore = create<State>()(
           if (found) { ex = found; break; }
         }
         if (!ex) return false;
-
-        // Optimistic local bump of weekly volume so the heatmap glows instantly.
         set((st) => ({
-          weeklyVolume: {
-            ...st.weeklyVolume,
-            [ex!.primary]: (st.weeklyVolume[ex!.primary] ?? 0) + 1,
-          },
+          weeklyVolume: { ...st.weeklyVolume, [ex!.primary]: (st.weeklyVolume[ex!.primary] ?? 0) + 1 },
         }));
-
         const ok = await pushWorkoutLog({
-          exercise_id: ex.id,
-          exercise_name: ex.name,
-          primary_muscle: ex.primary,
-          set_index: 0,
-          reps,
-          weight,
-          rpe: rpe ?? null,
-          performed_at: new Date().toISOString(),
+          exercise_id: ex.id, exercise_name: ex.name, primary_muscle: ex.primary,
+          set_index: 0, reps, weight, rpe: rpe ?? null, performed_at: new Date().toISOString(),
         });
-
         if (!ok) {
-          // Rollback the optimistic bump on failure.
           set((st) => ({
-            weeklyVolume: {
-              ...st.weeklyVolume,
-              [ex!.primary]: Math.max(0, (st.weeklyVolume[ex!.primary] ?? 1) - 1),
-            },
+            weeklyVolume: { ...st.weeklyVolume, [ex!.primary]: Math.max(0, (st.weeklyVolume[ex!.primary] ?? 1) - 1) },
           }));
         }
         return ok;
       },
+
+      /* ──────────── Routine editing ──────────── */
 
       addExerciseToDay: (dayId) => set((s) => ({
         routine: {
@@ -321,6 +360,53 @@ export const useMarcolaStore = create<State>()(
           }),
         },
       })),
+
+      addLibraryExerciseToDay: (dayId, libraryId) => {
+        const lib = getLibraryExercise(libraryId);
+        if (!lib) return;
+        set((s) => ({
+          routine: {
+            ...s.routine,
+            days: s.routine.days.map((d) => d.id !== dayId ? d : {
+              ...d,
+              exercises: [...d.exercises, {
+                id: `ex-${Date.now()}`,
+                name: lib.name,
+                primary: lib.primary,
+                secondary: lib.secondary,
+                restSeconds: lib.defaultRestSeconds,
+                tempo: lib.defaultTempo,
+                libraryId: lib.id,
+                image: lib.image,
+                sets: [mkSet(10, 0), mkSet(10, 0), mkSet(10, 0)],
+              }],
+            }),
+          },
+        }));
+      },
+
+      swapExercise: (dayId, exerciseId, libraryId) => {
+        const lib = getLibraryExercise(libraryId);
+        if (!lib) return;
+        set((s) => ({
+          routine: {
+            ...s.routine,
+            days: s.routine.days.map((d) => d.id !== dayId ? d : {
+              ...d,
+              exercises: d.exercises.map((e) => e.id !== exerciseId ? e : {
+                ...e,
+                name: lib.name,
+                primary: lib.primary,
+                secondary: lib.secondary,
+                restSeconds: lib.defaultRestSeconds,
+                tempo: lib.defaultTempo,
+                libraryId: lib.id,
+                image: lib.image,
+              }),
+            }),
+          },
+        }));
+      },
 
       removeExercise: (dayId, exerciseId) => set((s) => ({
         routine: {
@@ -336,6 +422,15 @@ export const useMarcolaStore = create<State>()(
           ...s.routine,
           days: s.routine.days.map((d) => d.id !== dayId ? d : {
             ...d, exercises: d.exercises.map((e) => e.id === exerciseId ? { ...e, name } : e),
+          }),
+        },
+      })),
+
+      updateExercise: (dayId, exerciseId, patch) => set((s) => ({
+        routine: {
+          ...s.routine,
+          days: s.routine.days.map((d) => d.id !== dayId ? d : {
+            ...d, exercises: d.exercises.map((e) => e.id === exerciseId ? { ...e, ...patch } : e),
           }),
         },
       })),
@@ -360,29 +455,136 @@ export const useMarcolaStore = create<State>()(
         return { routine: { ...s.routine, days: newDays } };
       }),
 
+      toggleWarmup: (exerciseId, setIndex) => set((s) => ({
+        routine: {
+          ...s.routine,
+          days: s.routine.days.map((d) => ({
+            ...d,
+            exercises: d.exercises.map((e) => e.id !== exerciseId ? e : {
+              ...e, sets: e.sets.map((st, j) => j !== setIndex ? st : { ...st, isWarmup: !st.isWarmup }),
+            }),
+          })),
+        },
+      })),
+
+      setSetRest: (exerciseId, setIndex, seconds) => set((s) => ({
+        routine: {
+          ...s.routine,
+          days: s.routine.days.map((d) => ({
+            ...d,
+            exercises: d.exercises.map((e) => e.id !== exerciseId ? e : {
+              ...e, sets: e.sets.map((st, j) => j !== setIndex ? st : { ...st, restSeconds: seconds }),
+            }),
+          })),
+        },
+      })),
+
+      /* ──────────── Session control ──────────── */
+
       startWorkout: (dayId) => set({
-        active: { dayId, exerciseIndex: 0, setIndex: 0, startedAt: Date.now(), finishedAt: null, log: [] },
+        active: { dayId, exerciseIndex: 0, setIndex: 0, startedAt: Date.now(), finishedAt: null, pausedAt: null, totalPausedMs: 0, log: [] },
         rest: { active: false, remaining: 0, total: 0 },
+        lastSummary: null,
       }),
 
-      finishWorkout: () => set((s) => ({
-        active: { ...s.active, finishedAt: Date.now() },
+      pauseSession: () => set((s) => s.active.pausedAt ? s : ({ active: { ...s.active, pausedAt: Date.now() } })),
+
+      resumeSession: () => set((s) => {
+        if (!s.active.pausedAt) return s;
+        const extra = Date.now() - s.active.pausedAt;
+        return { active: { ...s.active, pausedAt: null, totalPausedMs: s.active.totalPausedMs + extra } };
+      }),
+
+      discardSession: () => set((s) => ({
+        active: { ...emptyActive, dayId: s.active.dayId },
         rest: { active: false, remaining: 0, total: 0 },
+        lastSummary: null,
+        // Clear completed flags on all sets of the discarded day.
+        routine: {
+          ...s.routine,
+          days: s.routine.days.map((d) => d.id !== s.active.dayId ? d : {
+            ...d,
+            exercises: d.exercises.map((e) => ({
+              ...e, sets: e.sets.map((st) => ({ ...st, completed: false })),
+            })),
+          }),
+        },
       })),
+
+      finishWorkout: () => {
+        const s = get();
+        // Auto-resume if paused so totalPausedMs is finalized.
+        if (s.active.pausedAt) {
+          const extra = Date.now() - s.active.pausedAt;
+          set((st) => ({ active: { ...st.active, pausedAt: null, totalPausedMs: st.active.totalPausedMs + extra } }));
+        }
+        const day = s.getActiveDay();
+        const startedAt = s.active.startedAt ?? Date.now();
+        const finishedAt = Date.now();
+        const totalPausedMs = get().active.totalPausedMs;
+        const durationMs = Math.max(0, finishedAt - startedAt - totalPausedMs);
+
+        let tonnage = 0;
+        let setsCompleted = 0;
+        let warmupSets = 0;
+        const prs: SessionSummary["prs"] = [];
+
+        if (day) {
+          for (const ex of day.exercises) {
+            const topThisSession = ex.sets
+              .filter((st) => st.completed && !st.isWarmup)
+              .reduce((max, st) => (st.weight > max.weight ? { weight: st.weight, reps: st.reps } : max), { weight: 0, reps: 0 });
+            for (const st of ex.sets) {
+              if (!st.completed) continue;
+              if (st.isWarmup) { warmupSets++; continue; }
+              setsCompleted++;
+              tonnage += st.reps * st.weight;
+            }
+            // Naive PR: any working set ≥ previous logged max for this exercise.
+            // (Without history we flag the top set of the session.)
+            if (topThisSession.weight > 0) {
+              prs.push({ exerciseId: ex.id, exerciseName: ex.name, weight: topThisSession.weight, reps: topThisSession.reps });
+            }
+          }
+        }
+
+        const summary: SessionSummary = {
+          durationMs, tonnageKg: Math.round(tonnage), setsCompleted, warmupSets, prs,
+        };
+
+        set({
+          active: { ...get().active, finishedAt, pausedAt: null },
+          rest: { active: false, remaining: 0, total: 0 },
+          lastSummary: summary,
+        });
+
+        return summary;
+      },
+
+      clearSummary: () => set({ lastSummary: null }),
+
+      /* ──────────── Set execution ──────────── */
 
       completeCurrentSet: async (overrides) => {
         const s = get();
+        if (s.active.pausedAt) return; // bloqueado em pausa
         const day = s.getActiveDay(); if (!day) return;
         const exIdx = s.active.exerciseIndex;
         const setIdx = s.active.setIndex;
         const ex = day.exercises[exIdx]; if (!ex) return;
         const current = ex.sets[setIdx]; if (!current) return;
 
+        // Auto-start the session if user dives straight in.
+        if (!s.active.startedAt) {
+          set({ active: { ...s.active, startedAt: Date.now() } });
+        }
+
         const updatedSet: ExerciseSet = {
           ...current, completed: true,
           reps: overrides?.reps ?? current.reps,
           weight: overrides?.weight ?? current.weight,
           rpe: overrides?.rpe ?? current.rpe,
+          notes: overrides?.notes ?? current.notes,
         };
         const newExercises = day.exercises.map((e, i) =>
           i === exIdx ? { ...e, sets: e.sets.map((st, j) => j === setIdx ? updatedSet : st) } : e,
@@ -391,46 +593,44 @@ export const useMarcolaStore = create<State>()(
 
         const moreSets = setIdx + 1 < ex.sets.length;
         const moreExercises = exIdx + 1 < day.exercises.length;
+        const restSec = current.restSeconds ?? ex.restSeconds;
 
         const vol = { ...s.muscleVolume };
-        const work = (updatedSet.reps * updatedSet.weight) / 5000;
-        vol[ex.primary] = Math.min(1, (vol[ex.primary] ?? 0) + work);
-        ex.secondary?.forEach((m) => { vol[m] = Math.min(1, (vol[m] ?? 0) + work * 0.4); });
+        const newWeekly = { ...s.weeklyVolume };
+        if (!updatedSet.isWarmup) {
+          const work = (updatedSet.reps * updatedSet.weight) / 5000;
+          vol[ex.primary] = Math.min(1, (vol[ex.primary] ?? 0) + work);
+          ex.secondary?.forEach((m) => { vol[m] = Math.min(1, (vol[m] ?? 0) + work * 0.4); });
+          newWeekly[ex.primary] = (newWeekly[ex.primary] ?? 0) + 1;
+        }
 
         set({
           routine: { ...s.routine, days: newDays },
           muscleVolume: vol,
-          weeklyVolume: {
-            ...s.weeklyVolume,
-            [ex.primary]: (s.weeklyVolume[ex.primary] ?? 0) + 1,
-          },
+          weeklyVolume: newWeekly,
           active: {
-            ...s.active,
+            ...get().active,
             setIndex: moreSets ? setIdx + 1 : 0,
             exerciseIndex: moreSets ? exIdx : moreExercises ? exIdx + 1 : exIdx,
-            log: [...s.active.log, { exerciseId: ex.id, setIndex: setIdx, weight: updatedSet.weight, reps: updatedSet.reps, ts: Date.now() }],
+            log: [...s.active.log, { exerciseId: ex.id, setIndex: setIdx, weight: updatedSet.weight, reps: updatedSet.reps, ts: Date.now(), isWarmup: updatedSet.isWarmup }],
           },
-          rest: { active: true, remaining: ex.restSeconds, total: ex.restSeconds },
+          rest: { active: true, remaining: restSec, total: restSec },
         });
 
-        // Fire-and-forget cloud push; rollback weeklyVolume on failure.
-        void pushWorkoutLog({
-          exercise_id: ex.id, exercise_name: ex.name, primary_muscle: ex.primary,
-          set_index: setIdx, reps: updatedSet.reps, weight: updatedSet.weight,
-          rpe: updatedSet.rpe ?? null, performed_at: new Date().toISOString(),
-        }).then((ok) => {
-          if (!ok) {
-            set((st) => ({
-              weeklyVolume: {
-                ...st.weeklyVolume,
-                [ex.primary]: Math.max(0, (st.weeklyVolume[ex.primary] ?? 1) - 1),
-              },
-            }));
-          }
-        });
+        if (!updatedSet.isWarmup) {
+          void pushWorkoutLog({
+            exercise_id: ex.id, exercise_name: ex.name, primary_muscle: ex.primary,
+            set_index: setIdx, reps: updatedSet.reps, weight: updatedSet.weight,
+            rpe: updatedSet.rpe ?? null, performed_at: new Date().toISOString(),
+          }).then((ok) => {
+            if (!ok) {
+              set((st) => ({
+                weeklyVolume: { ...st.weeklyVolume, [ex.primary]: Math.max(0, (st.weeklyVolume[ex.primary] ?? 1) - 1) },
+              }));
+            }
+          });
+        }
       },
-
-
 
       nextExercise: () => set((s) => {
         const day = s.getActiveDay(); if (!day) return s;
@@ -459,7 +659,7 @@ export const useMarcolaStore = create<State>()(
         set((s) => ({ muscleVolume: { ...s.muscleVolume, [muscle]: Math.min(1, (s.muscleVolume[muscle] ?? 0) + amount) } })),
     }),
     {
-      name: "marcola-prime-store-v1",
+      name: "marcola-prime-store-v2",
       storage: createJSONStorage(() => (typeof window !== "undefined" ? window.localStorage : (undefined as never))),
       partialize: (s) => ({
         routine: s.routine,
@@ -467,6 +667,8 @@ export const useMarcolaStore = create<State>()(
         schedule: s.schedule,
         inventory: s.inventory,
         muscleVolume: s.muscleVolume,
+        // Persist active session so user can resume draft after closing tab.
+        active: s.active,
       }),
     },
   ),

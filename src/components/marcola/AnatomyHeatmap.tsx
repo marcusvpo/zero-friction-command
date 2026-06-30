@@ -31,7 +31,7 @@ import type { MuscleId } from "@/store/marcola";
 
 const IMAGE_W = 704;
 const IMAGE_H = 1280;
-const DEBUG_MODE = true; // ← FLIP TO false IN PRODUCTION
+const DEBUG_MODE = false; // ← FLIP TO false IN PRODUCTION
 
 interface Props {
   /** Completed sets per primary muscle over the trailing 7 days. */
