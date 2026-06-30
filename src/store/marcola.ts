@@ -258,6 +258,10 @@ interface State {
   getElapsedMs: () => number;
   isPaused: () => boolean;
   hasActiveSession: () => boolean;
+  getSessionTelemetry: () => SessionTelemetry;
+
+  /* lifecycle */
+  wipeData: () => Promise<void>;
 
   /* cloud */
   hydrateFromCloud: () => Promise<void>;
