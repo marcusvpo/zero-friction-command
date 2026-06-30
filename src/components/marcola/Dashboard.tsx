@@ -163,7 +163,7 @@ export function Dashboard() {
       </Panel>
 
       <Panel title="Mapa Anatômico Holográfico" code="M4.1" status="ACTIVE">
-        <AnatomyHeatmap data={muscleVolume} />
+        <AnatomyHeatmap data={weeklyVolume} />
       </Panel>
 
       <Panel title="Volume por Grupo" code="sets/7d" status="OK">
