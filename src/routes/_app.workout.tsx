@@ -437,10 +437,13 @@ function WorkoutConsole() {
                 <button
                   key={rpe}
                   onClick={() => {
-                    // Patch the just-completed set (previous index)
-                    // Simplest: store RPE in log via setSetRest equivalent — handled via direct state mutation here.
+                    adjustRestForRPE(rpe);
                     setPostSetDrawer({ open: false });
-                    toast.message(`RPE ${rpe} registrado`);
+                    const msg = rpe <= 7 ? "Rest reduzido em 15s (RPE baixo)" :
+                                rpe === 9 ? "Rest +30s (RPE alto)" :
+                                rpe >= 10 ? "Rest +60s (RPE máximo)" :
+                                "RPE alvo atingido";
+                    toast.message(`RPE ${rpe}`, { description: msg });
                   }}
                   className="glass h-10 flex-1 rounded-md font-mono-tactical text-xs text-foreground hover:bg-cyan/10 hover:text-cyan"
                 >
