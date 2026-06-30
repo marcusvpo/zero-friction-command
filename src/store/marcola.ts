@@ -130,6 +130,8 @@ interface State {
   schedule: SupplementSlot[];
   inventory: InventoryItem[];
   muscleVolume: Record<MuscleId, number>;
+  /** Completed sets per primary muscle over the trailing 7 days (live from Supabase). */
+  weeklyVolume: Record<MuscleId, number>;
   syncStatus: "idle" | "syncing" | "ok" | "offline" | "error";
   lastSyncedAt: number | null;
   lastWeekTonnage: number;
@@ -144,6 +146,9 @@ interface State {
 
   /* actions */
   hydrateFromCloud: () => Promise<void>;
+  fetchTodayWorkout: () => Promise<WorkoutDay | null>;
+  fetchWeeklyVolume: () => Promise<Record<MuscleId, number>>;
+  logCompletedSet: (exerciseId: string, weight: number, reps: number, rpe?: number) => Promise<boolean>;
   persistRoutine: () => Promise<boolean>;
   addExerciseToDay: (dayId: string) => void;
   removeExercise: (dayId: string, exerciseId: string) => void;
