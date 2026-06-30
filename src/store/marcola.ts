@@ -702,11 +702,17 @@ export const useMarcolaStore = create<State>()(
 
         let tonnage = 0;
         let setsCompleted = 0;
+        let setsPlanned = 0;
         let warmupSets = 0;
         const prs: SessionSummary["prs"] = [];
+        let overloadHits = 0;
+        let overloadEligible = 0;
+        const sessionDayId = day?.id ?? null;
 
         if (day) {
           for (const ex of day.exercises) {
+            const workingSets = ex.sets.filter((st) => !st.isWarmup);
+            setsPlanned += workingSets.length;
             const topThisSession = ex.sets
               .filter((st) => st.completed && !st.isWarmup)
               .reduce((max, st) => (st.weight > max.weight ? { weight: st.weight, reps: st.reps } : max), { weight: 0, reps: 0 });
@@ -716,16 +722,79 @@ export const useMarcolaStore = create<State>()(
               setsCompleted++;
               tonnage += st.reps * st.weight;
             }
-            // Naive PR: any working set ≥ previous logged max for this exercise.
-            // (Without history we flag the top set of the session.)
             if (topThisSession.weight > 0) {
               prs.push({ exerciseId: ex.id, exerciseName: ex.name, weight: topThisSession.weight, reps: topThisSession.reps });
+            }
+            // Overload tracking vs suggestion
+            const sug = s.getSuggestion(ex.id);
+            if (sug && sug.reason !== "first-time" && topThisSession.weight > 0) {
+              overloadEligible++;
+              const target = sug.weight * sug.reps;
+              const got = topThisSession.weight * topThisSession.reps;
+              if (got >= target) overloadHits++;
             }
           }
         }
 
+        // ── Score components ──
+        const execution = setsPlanned > 0
+          ? Math.round(Math.min(100, (setsCompleted / setsPlanned) * 100))
+          : 0;
+
+        const overload = overloadEligible > 0
+          ? Math.round((overloadHits / overloadEligible) * 100)
+          : 50;
+
+        // Volume vs average of last 4 sessions on this same day
+        let volume = 70;
+        if (sessionDayId && tonnage > 0) {
+          const dayHistory: number[] = [];
+          const seenDates = new Set<string>();
+          // Walk all exercises in the day; pick session totals by date.
+          if (day) {
+            const dayExIds = new Set(day.exercises.map((e) => e.id));
+            const dateTotals = new Map<string, number>();
+            for (const exId of dayExIds) {
+              const logs = s.history[exId] ?? [];
+              for (const log of logs) {
+                const dateKey = log.performed_at.slice(0, 10);
+                dateTotals.set(dateKey, (dateTotals.get(dateKey) ?? 0) + log.reps * log.weight);
+              }
+            }
+            // Exclude today (this session not yet persisted, but defensive)
+            const todayKey = new Date().toISOString().slice(0, 10);
+            const sorted = [...dateTotals.entries()]
+              .filter(([d]) => d !== todayKey)
+              .sort((a, b) => b[0].localeCompare(a[0]))
+              .slice(0, 4);
+            for (const [d, t] of sorted) { seenDates.add(d); dayHistory.push(t); }
+          }
+          if (dayHistory.length > 0) {
+            const avg = dayHistory.reduce((a, b) => a + b, 0) / dayHistory.length;
+            if (avg > 0) {
+              const ratio = tonnage / avg;
+              // ratio 1.0 → 80, 1.2+ → 100, 0.8 → 60
+              volume = Math.round(Math.max(0, Math.min(100, 80 + (ratio - 1) * 100)));
+            }
+          }
+        }
+
+        // Density: tonnage per minute vs rest avg
+        const minutes = Math.max(1, durationMs / 60_000);
+        const tonnagePerMin = tonnage / minutes;
+        // Reference: ~150kg/min is good throughput. Scale 0..100.
+        const throughputScore = Math.round(Math.max(0, Math.min(100, (tonnagePerMin / 150) * 100)));
+        const restAvg = s.getAvgRest();
+        const restPenalty = restAvg > 90 ? Math.min(40, ((restAvg - 90) / 30) * 10) : 0;
+        const density = Math.round(Math.max(0, Math.min(100, throughputScore - restPenalty)));
+
+        const total = Math.round(
+          0.40 * execution + 0.25 * overload + 0.20 * volume + 0.15 * density
+        );
+        const score: SessionScore = { total, execution, overload, volume, density };
+
         const summary: SessionSummary = {
-          durationMs, tonnageKg: Math.round(tonnage), setsCompleted, warmupSets, prs,
+          durationMs, tonnageKg: Math.round(tonnage), setsCompleted, warmupSets, prs, score,
         };
 
         set({
