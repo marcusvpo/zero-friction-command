@@ -43,6 +43,10 @@ function WorkoutConsole() {
   const clearSummary = useMarcolaStore((s) => s.clearSummary);
   const toggleWarmup = useMarcolaStore((s) => s.toggleWarmup);
   const setSetRest = useMarcolaStore((s) => s.setSetRest);
+  const getSuggestion = useMarcolaStore((s) => s.getSuggestion);
+  const adjustRestForRPE = useMarcolaStore((s) => s.adjustRestForRPE);
+  const seenSwipeHint = useMarcolaStore((s) => s.seenSwipeHint);
+  const markSwipeHintSeen = useMarcolaStore((s) => s.markSwipeHintSeen);
 
   const day = routine.days.find((d) => d.id === active.dayId) ?? routine.days[0];
   const exercise = day.exercises[active.exerciseIndex];
@@ -51,40 +55,63 @@ function WorkoutConsole() {
   const isPaused = active.pausedAt !== null;
   const isResting = rest.active;
 
-  // ───── Rest tick ─────
+  // ───── Rest tick (parent only re-renders when rest.remaining changes) ─────
   useEffect(() => {
     if (!rest.active || isPaused) return;
     const id = window.setInterval(tickRest, 1000);
     return () => window.clearInterval(id);
   }, [rest.active, isPaused, tickRest]);
 
-  // ───── Live total-session ticker (1s pulse) ─────
-  const [, setNow] = useState(0);
-  useEffect(() => {
-    if (!active.startedAt || active.finishedAt || isPaused) return;
-    const id = window.setInterval(() => setNow((n) => n + 1), 1000);
-    return () => window.clearInterval(id);
-  }, [active.startedAt, active.finishedAt, isPaused]);
-
-  const elapsedLabel = useMemo(() => formatElapsed(getElapsedMs(active)), [active]);
+  // ───── Smart Overload suggestion ─────
+  const suggestion: OverloadSuggestion | null = useMemo(
+    () => (exercise ? getSuggestion(exercise.id) : null),
+    [exercise, getSuggestion, active.exerciseIndex],
+  );
+  const isSmartMatch = !!(
+    suggestion && currentSet &&
+    Math.abs(currentSet.weight - suggestion.weight) < 0.01 &&
+    currentSet.reps === suggestion.reps
+  );
 
   const mm = String(Math.floor(rest.remaining / 60)).padStart(2, "0");
   const ss = String(rest.remaining % 60).padStart(2, "0");
   const restPct = rest.total > 0 ? (rest.remaining / rest.total) * 100 : 0;
 
-  // Confirm-set drawer for RPE/notes (optional, auto-dismisses)
+  // Drawers
   const [postSetDrawer, setPostSetDrawer] = useState<{ open: boolean }>({ open: false });
-  // Per-set config drawer (warm-up / rest override)
   const [setConfigOpen, setSetConfigOpen] = useState(false);
-  // Discard confirm
   const [discardOpen, setDiscardOpen] = useState(false);
+  // Hint banner — só na primeira sessão.
+  const [hintVisible, setHintVisible] = useState(!seenSwipeHint);
+  useEffect(() => {
+    if (!hintVisible) return;
+    const t = window.setTimeout(() => {
+      setHintVisible(false);
+      markSwipeHintSeen();
+    }, 4000);
+    return () => window.clearTimeout(t);
+  }, [hintVisible, markSwipeHintSeen]);
 
   const handleConfirm = async () => {
     if (!exercise || !currentSet) return;
     await completeSet();
     setPostSetDrawer({ open: true });
     window.setTimeout(() => setPostSetDrawer({ open: false }), 2400);
+    if (typeof navigator !== "undefined" && "vibrate" in navigator) navigator.vibrate?.(20);
     toast.success("Set registrado", { description: `Descanso ${currentSet.restSeconds ?? exercise.restSeconds}s iniciado` });
+  };
+
+  const handleSkip = () => {
+    if (!exercise) return;
+    if (typeof navigator !== "undefined" && "vibrate" in navigator) navigator.vibrate?.([15, 30, 15]);
+    next();
+    toast.message("Set pulado", { description: "Avançando para próximo exercício" });
+  };
+
+  const handleDragEnd = (_: unknown, info: PanInfo) => {
+    const THRESHOLD = 80;
+    if (info.offset.x > THRESHOLD) void handleConfirm();
+    else if (info.offset.x < -THRESHOLD) handleSkip();
   };
 
   const handleFinish = () => {
