@@ -1,6 +1,7 @@
 import { Panel } from "./Panel";
 import { TonnageChart, VolumeChart, FatigueChart } from "./Charts";
 import { SupplementTimeline } from "./SupplementTimeline";
+import { AnatomicalBody } from "./AnatomicalBody";
 import { Flame, Crosshair, Timer } from "lucide-react";
 
 export function Dashboard() {
@@ -27,7 +28,7 @@ export function Dashboard() {
       {/* Heatmap + Volume */}
       <div className="grid grid-cols-1 gap-3">
         <Panel title="MAPA ANATÔMICO" code="M4.1" status="ACTIVE">
-          <AnatomicalHeatmap />
+          <AnatomicalBody />
         </Panel>
 
         <Panel title="VOLUME · GRUPO" code="SETS/7d" status="OK">
