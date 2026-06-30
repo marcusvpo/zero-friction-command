@@ -76,6 +76,20 @@ export interface RatingOverride {
   stars: number; rationale: string; source: "deep-research"; updatedAt: string;
 }
 
+export interface Biometrics {
+  weightKg: number | null;
+  heightCm: number | null;
+  weightUpdatedAt: string | null; // ISO
+}
+
+export interface PRMedal {
+  exerciseId: string;
+  exerciseName: string;
+  primary: MuscleId;
+  weight: number;
+  reps: number;
+}
+
 export const WEEKDAY_LABELS = ["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SÁB"];
 export const WEEKDAY_LONG  = ["Domingo","Segunda","Terça","Quarta","Quinta","Sexta","Sábado"];
 
@@ -172,6 +186,7 @@ interface State {
   lastSummary: SessionSummary | null;
   saturatedMap: Record<string, SaturationEntry>;
   ratingOverrides: Record<string, RatingOverride>;
+  biometrics: Biometrics;
 
   /* selectors */
   getActiveDay: () => WorkoutDay | null;
@@ -230,6 +245,12 @@ interface State {
   markExerciseSaturated: (libraryId: string, weeks: number) => void;
   unmarkSaturated: (libraryId: string) => void;
   setRatingOverride: (libraryId: string, override: RatingOverride) => void;
+
+  /* operator profile */
+  setBiometrics: (patch: Partial<Pick<Biometrics, "weightKg" | "heightCm">>) => void;
+  daysSinceWeightUpdate: () => number | null;
+  needsWeightCalibration: () => boolean;
+  getPRMedals: () => PRMedal[];
 }
 
 export const useMarcolaStore = create<State>()(
@@ -249,6 +270,7 @@ export const useMarcolaStore = create<State>()(
       lastSummary: null,
       saturatedMap: {},
       ratingOverrides: {},
+      biometrics: { weightKg: null, heightCm: null, weightUpdatedAt: null },
 
       getActiveDay: () => {
         const { routine, active } = get();
@@ -699,6 +721,56 @@ export const useMarcolaStore = create<State>()(
       setRatingOverride: (libraryId, override) => set((s) => ({
         ratingOverrides: { ...s.ratingOverrides, [libraryId]: override },
       })),
+
+      /* ──────────── Operator Profile ──────────── */
+
+      setBiometrics: (patch) => set((s) => {
+        const next: Biometrics = { ...s.biometrics };
+        if (patch.weightKg !== undefined) {
+          next.weightKg = patch.weightKg;
+          next.weightUpdatedAt = new Date().toISOString();
+        }
+        if (patch.heightCm !== undefined) next.heightCm = patch.heightCm;
+        return { biometrics: next };
+      }),
+
+      daysSinceWeightUpdate: () => {
+        const ts = get().biometrics.weightUpdatedAt;
+        if (!ts) return null;
+        return Math.floor((Date.now() - new Date(ts).getTime()) / 86_400_000);
+      },
+
+      needsWeightCalibration: () => {
+        const d = get().daysSinceWeightUpdate();
+        return d === null ? true : d >= 7;
+      },
+
+      getPRMedals: () => {
+        const { routine } = get();
+        const best = new Map<string, PRMedal>();
+        for (const day of routine.days) {
+          for (const ex of day.exercises) {
+            let top: { weight: number; reps: number } = { weight: 0, reps: 0 };
+            for (const st of ex.sets) {
+              if (st.isWarmup) continue;
+              if (st.weight > top.weight) top = { weight: st.weight, reps: st.reps };
+            }
+            if (top.weight <= 0) continue;
+            const key = ex.libraryId ?? ex.id;
+            const prev = best.get(key);
+            if (!prev || top.weight > prev.weight) {
+              best.set(key, {
+                exerciseId: ex.id,
+                exerciseName: ex.name,
+                primary: ex.primary,
+                weight: top.weight,
+                reps: top.reps,
+              });
+            }
+          }
+        }
+        return Array.from(best.values()).sort((a, b) => b.weight - a.weight);
+      },
     }),
     {
       name: "marcola-prime-store-v2",
@@ -712,6 +784,7 @@ export const useMarcolaStore = create<State>()(
         active: s.active,
         saturatedMap: s.saturatedMap,
         ratingOverrides: s.ratingOverrides,
+        biometrics: s.biometrics,
       }),
     },
   ),

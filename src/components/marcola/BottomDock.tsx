@@ -1,14 +1,14 @@
-import { LayoutDashboard, Dumbbell, Library, FlaskConical, Plus } from "lucide-react";
+import { Activity, BarChart3, Wrench, UserCog, Plus } from "lucide-react";
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { QuickLogSheet } from "./QuickLogDrawer";
 
 const items = [
-  { id: "dashboard", to: "/",          label: "Painel",     icon: LayoutDashboard },
-  { id: "workout",   to: "/workout",   label: "Treino",     icon: Dumbbell },
-  { id: "library",   to: "/library",   label: "Biblioteca", icon: Library },
-  { id: "logistics", to: "/logistics", label: "Logística",  icon: FlaskConical },
+  { id: "terminal", to: "/workout",  label: "Terminal", icon: Activity },
+  { id: "intel",    to: "/intel",    label: "Intel",    icon: BarChart3 },
+  { id: "builder",  to: "/builder",  label: "Builder",  icon: Wrench },
+  { id: "operator", to: "/operator", label: "Operator", icon: UserCog },
 ] as const;
 
 export function BottomDock() {
@@ -54,23 +54,26 @@ function DockLink({
   return (
     <Link
       to={item.to}
-      className="group relative flex h-11 w-11 items-center justify-center"
+      className="group relative flex h-11 w-14 flex-col items-center justify-center gap-0.5"
       aria-label={item.label}
       aria-current={active ? "page" : undefined}
     >
       <motion.span whileTap={{ scale: 0.85 }} className="grid place-items-center">
         <Icon
-          className={`h-[20px] w-[20px] transition-colors ${
+          className={`h-[18px] w-[18px] transition-colors ${
             active ? "text-cyan" : "text-muted-foreground group-hover:text-foreground"
           }`}
           strokeWidth={active ? 2.25 : 1.75}
         />
       </motion.span>
+      <span className={`font-mono-tactical text-[8px] tracking-[0.15em] ${active ? "text-cyan" : "text-muted-foreground/70"}`}>
+        {item.label.toUpperCase()}
+      </span>
       {active && (
         <motion.span
           layoutId="dock-active-dot"
           transition={{ type: "spring", stiffness: 380, damping: 28 }}
-          className="absolute -bottom-0.5 h-1 w-1 rounded-full bg-cyan shadow-[0_0_8px_var(--cyan)]"
+          className="absolute -bottom-1 h-1 w-1 rounded-full bg-cyan shadow-[0_0_8px_var(--cyan)]"
         />
       )}
     </Link>
