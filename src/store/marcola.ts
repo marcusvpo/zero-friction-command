@@ -10,7 +10,7 @@ import {
   fetchWeeklyVolume as fetchWeeklyVolumeRemote,
   type WorkoutLogRow,
 } from "@/lib/db";
-import { isSupabaseEnabled } from "@/lib/supabase";
+import { isSupabaseEnabled, supabase, getOwnerId } from "@/lib/supabase";
 import { getLibraryExercise } from "@/lib/exercise-library";
 import { enqueueWorkoutLog } from "@/lib/sync-queue";
 
@@ -100,6 +100,13 @@ export interface OverloadSuggestion {
   label: string;
 }
 
+export interface SessionTelemetry {
+  volumeKg: number;
+  sets: number;
+  isLive: boolean;
+}
+
+
 const COMPOUND_MUSCLES = new Set<MuscleId>([
   "chest", "quads", "lats", "glutes", "hamstrings", "lower-back",
 ]);
@@ -107,76 +114,113 @@ const COMPOUND_MUSCLES = new Set<MuscleId>([
 export const WEEKDAY_LABELS = ["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SÁB"];
 export const WEEKDAY_LONG  = ["Domingo","Segunda","Terça","Quarta","Quinta","Sexta","Sábado"];
 
-/* ───────────────────────── Seed Data (5-day split) ───────────────────────── */
+/* ───────────────────── Seed Data (PPL×2 + LEGS — Operador) ───────────────────── */
 
-const mkSet = (reps = 8, weight = 0): ExerciseSet => ({ reps, weight, completed: false });
+const mkSet = (reps = 10, weight = 0): ExerciseSet => ({ reps, weight, completed: false });
+const mkSets3 = (reps = 10, weight = 0): ExerciseSet[] => [mkSet(reps, weight), mkSet(reps, weight), mkSet(reps, weight)];
+
+// Bloco de esteira reaproveitável (15min · 6.5 km/h · 3-6% inclinação).
+const cardioExercise = (idSuffix: string): Exercise => ({
+  id: `cardio-${idSuffix}`,
+  name: "Esteira Caminhada Inclinada",
+  primary: "calves",
+  secondary: ["glutes", "hamstrings", "quads"],
+  restSeconds: 0,
+  tempo: "constante",
+  libraryId: "lib-esteira-caminhada-inclinada",
+  // Único "set" representando o bloco — peso=0, reps=15 (minutos).
+  sets: [{ reps: 15, weight: 0, completed: false }],
+  notes: "15min · 6.5 km/h · inclinação 3→6%",
+});
+
+const pushExercises = (suffix: string): Exercise[] => [
+  { id: `px-${suffix}-1`, name: "Supino Reto Máquina (Anilhas)", primary: "chest", secondary: ["shoulders","triceps"], restSeconds: 90, tempo: "2-1-2-0", libraryId: "lib-supino-maquina", sets: mkSets3(10, 0) },
+  { id: `px-${suffix}-2`, name: "Fly Máquina (Peck Deck)", primary: "chest", restSeconds: 75, tempo: "2-1-2-1", libraryId: "lib-voador-peck-deck", sets: mkSets3(10, 0) },
+  { id: `px-${suffix}-3`, name: "Supino Inclinado Halter", primary: "chest", secondary: ["shoulders"], restSeconds: 90, tempo: "3-1-1-0", libraryId: "lib-supino-inclinado-halter", sets: mkSets3(10, 0) },
+  { id: `px-${suffix}-4`, name: "Wide Chest Press Máquina", primary: "chest", secondary: ["shoulders","triceps"], restSeconds: 90, tempo: "2-1-2-0", libraryId: "lib-wide-chest-press-maquina", sets: mkSets3(10, 0) },
+  { id: `px-${suffix}-5`, name: "Desenvolvimento Máquina", primary: "shoulders", secondary: ["triceps"], restSeconds: 90, tempo: "2-1-1-0", libraryId: "lib-desenvolvimento-maquina", sets: mkSets3(10, 0) },
+  { id: `px-${suffix}-6`, name: "Tríceps Corda Polia", primary: "triceps", restSeconds: 60, tempo: "2-1-2-0", libraryId: "lib-triceps-corda", sets: mkSets3(10, 0) },
+  { id: `px-${suffix}-7`, name: "Tríceps Francês Polia (Corda)", primary: "triceps", restSeconds: 60, tempo: "3-1-1-0", libraryId: "lib-triceps-overhead-corda", sets: mkSets3(10, 0) },
+  { id: `px-${suffix}-8`, name: "Tríceps Press Máquina", primary: "triceps", restSeconds: 60, tempo: "2-1-2-0", libraryId: "lib-triceps-press-maquina", sets: mkSets3(10, 0) },
+];
+
+const pullExercises = (suffix: string): Exercise[] => [
+  { id: `pl-${suffix}-1`, name: "Lat Pulldown Aberta (Wide)", primary: "lats", secondary: ["biceps"], restSeconds: 90, tempo: "2-1-2-0", libraryId: "lib-pulldown", sets: mkSets3(10, 0) },
+  { id: `pl-${suffix}-2`, name: "Remada Máquina (Seated Row)", primary: "lats", secondary: ["traps","biceps"], restSeconds: 90, tempo: "2-1-2-0", libraryId: "lib-remada-sentada-maquina", sets: mkSets3(10, 0) },
+  { id: `pl-${suffix}-3`, name: "Lat Pulldown Pegada Fechada", primary: "lats", secondary: ["biceps"], restSeconds: 90, tempo: "2-1-2-0", libraryId: "lib-pulldown-neutro", sets: mkSets3(10, 0) },
+  { id: `pl-${suffix}-4`, name: "Pulldown Corda Polia (Braço Reto)", primary: "lats", restSeconds: 60, tempo: "2-1-2-0", libraryId: "lib-pulldown-straight-arm", sets: mkSets3(10, 0) },
+  { id: `pl-${suffix}-5`, name: "Rosca Corda Polia", primary: "biceps", secondary: ["forearms"], restSeconds: 60, tempo: "2-1-2-0", libraryId: "lib-rosca-corda-polia", sets: mkSets3(10, 0) },
+  { id: `pl-${suffix}-6`, name: "Rosca Scott", primary: "biceps", restSeconds: 75, tempo: "2-1-2-0", libraryId: "lib-rosca-scott", sets: mkSets3(10, 0) },
+  { id: `pl-${suffix}-7`, name: "Rosca Inversa Barra Polia", primary: "forearms", secondary: ["biceps"], restSeconds: 60, tempo: "2-1-2-0", libraryId: "lib-rosca-w-invertida-polia", sets: mkSets3(10, 0) },
+];
+
+const legsExercises = (): Exercise[] => [
+  { id: "lg-1", name: "Cadeira Extensora", primary: "quads", restSeconds: 75, tempo: "2-1-2-1", libraryId: "lib-cadeira-extensora", sets: mkSets3(10, 0) },
+  { id: "lg-2", name: "Mesa Flexora", primary: "hamstrings", secondary: ["glutes"], restSeconds: 75, tempo: "2-1-2-1", libraryId: "lib-mesa-flexora", sets: mkSets3(10, 0) },
+  { id: "lg-3", name: "Seated Leg Press", primary: "quads", secondary: ["glutes","hamstrings"], restSeconds: 120, tempo: "2-1-2-0", libraryId: "lib-leg-press-45", sets: mkSets3(10, 0) },
+  { id: "lg-4", name: "Hack Squat (Agachamento Smith)", primary: "quads", secondary: ["glutes","hamstrings"], restSeconds: 120, tempo: "3-1-1-0", libraryId: "lib-hack-squat", sets: mkSets3(10, 0), notes: "Anotado como hack squat — confirmar com operador se for ombros" },
+  { id: "lg-5", name: "Elevação Lateral", primary: "shoulders", restSeconds: 60, tempo: "2-0-2-1", libraryId: "lib-elevacao-lateral", sets: mkSets3(10, 0) },
+  { id: "lg-6", name: "Remada Alta Polia Baixa", primary: "shoulders", secondary: ["traps","biceps"], restSeconds: 75, tempo: "2-1-1-0", libraryId: "lib-remada-alta-polia", sets: mkSets3(10, 0) },
+];
+
+const absExercises = (suffix: string): Exercise[] => [
+  { id: `abs-${suffix}-1`, name: "Abdominal Cabo Ajoelhado", primary: "core", restSeconds: 45, tempo: "2-1-2-0", libraryId: "lib-cable-crunch", sets: mkSets3(15, 0) },
+  { id: `abs-${suffix}-2`, name: "Prancha Abdominal", primary: "core", secondary: ["obliques"], restSeconds: 45, tempo: "isométrico", libraryId: "lib-prancha-abdominal", sets: [mkSet(45, 0), mkSet(45, 0), mkSet(60, 0)] },
+  { id: `abs-${suffix}-3`, name: "Russian Twist", primary: "obliques", secondary: ["core"], restSeconds: 45, tempo: "1-0-1-0", libraryId: "lib-russian-twist", sets: mkSets3(15, 0) },
+];
 
 const seedRoutine: Routine = {
-  name: "Marcola Prime · 5-Split", split: "BRO",
+  name: "Operador · PPL×2 + Legs", split: "PPL",
   days: [
-    { id: "d1", code: "D1", name: "PUSH", focus: "Peito · Ombros · Tríceps",
-      exercises: [
-        { id: "e1", name: "Supino Reto Barra", primary: "chest", secondary: ["shoulders","triceps"], restSeconds: 120, tempo: "3-1-1-0", libraryId: "lib-supino-reto", sets: [mkSet(8,100),mkSet(8,100),mkSet(6,110),mkSet(6,110)] },
-        { id: "e2", name: "Supino Inclinado Halter", primary: "chest", secondary: ["shoulders"], restSeconds: 90, tempo: "3-1-1-0", libraryId: "lib-supino-inclinado-halter", sets: [mkSet(10,32),mkSet(10,32),mkSet(8,34)] },
-        { id: "e3", name: "Desenvolvimento Militar", primary: "shoulders", secondary: ["triceps"], restSeconds: 90, tempo: "2-1-1-0", libraryId: "lib-desenvolvimento", sets: [mkSet(8,50),mkSet(8,50),mkSet(6,55)] },
-        { id: "e4", name: "Elevação Lateral", primary: "shoulders", restSeconds: 60, tempo: "2-0-2-1", libraryId: "lib-elevacao-lateral", sets: [mkSet(12,14),mkSet(12,14),mkSet(10,16)] },
-        { id: "e5", name: "Tríceps Corda", primary: "triceps", restSeconds: 60, tempo: "2-1-2-0", libraryId: "lib-triceps-corda", sets: [mkSet(12,28),mkSet(12,28),mkSet(10,32)] },
-      ] },
-    { id: "d2", code: "D2", name: "PULL", focus: "Costas · Bíceps · Antebraço",
-      exercises: [
-        { id: "p1", name: "Barra Fixa Pronada", primary: "lats", secondary: ["biceps"], restSeconds: 120, tempo: "2-0-3-1", libraryId: "lib-barra-fixa", sets: [mkSet(8,0),mkSet(8,0),mkSet(6,10)] },
-        { id: "p2", name: "Remada Curvada", primary: "lats", secondary: ["traps","biceps"], restSeconds: 120, tempo: "2-1-2-0", libraryId: "lib-remada-curvada", sets: [mkSet(8,80),mkSet(8,80),mkSet(6,90)] },
-        { id: "p3", name: "Puxada Frontal", primary: "lats", restSeconds: 90, sets: [mkSet(10,70),mkSet(10,70),mkSet(8,75)] },
-        { id: "p4", name: "Rosca Direta Barra W", primary: "biceps", restSeconds: 75, tempo: "2-1-2-0", libraryId: "lib-rosca-direta", sets: [mkSet(10,30),mkSet(10,30),mkSet(8,32)] },
-        { id: "p5", name: "Martelo", primary: "biceps", secondary: ["forearms"], restSeconds: 60, sets: [mkSet(12,18),mkSet(12,18)] },
-      ] },
-    { id: "d3", code: "D3", name: "LEGS", focus: "Quadríceps · Posterior · Glúteo",
-      exercises: [
-        { id: "l1", name: "Agachamento Livre", primary: "quads", secondary: ["glutes","core","lower-back"], restSeconds: 180, tempo: "3-1-1-0", libraryId: "lib-agachamento", sets: [mkSet(8,120),mkSet(8,120),mkSet(6,140),mkSet(6,140)] },
-        { id: "l2", name: "Leg Press 45°", primary: "quads", secondary: ["glutes"], restSeconds: 120, tempo: "2-1-2-0", libraryId: "lib-leg-press", sets: [mkSet(12,240),mkSet(12,240),mkSet(10,280)] },
-        { id: "l3", name: "Stiff", primary: "hamstrings", secondary: ["glutes","lower-back"], restSeconds: 120, tempo: "3-1-1-0", libraryId: "lib-stiff", sets: [mkSet(10,90),mkSet(10,90),mkSet(8,100)] },
-        { id: "l4", name: "Cadeira Flexora", primary: "hamstrings", restSeconds: 75, sets: [mkSet(12,60),mkSet(12,60)] },
-        { id: "l5", name: "Panturrilha em Pé", primary: "calves", restSeconds: 60, tempo: "2-1-3-1", libraryId: "lib-panturrilha", sets: [mkSet(15,120),mkSet(15,120),mkSet(12,140)] },
-      ] },
-    { id: "d4", code: "D4", name: "UPPER", focus: "Torso completo · Densidade",
-      exercises: [
-        { id: "u1", name: "Supino Inclinado Barra", primary: "chest", secondary: ["shoulders","triceps"], restSeconds: 120, sets: [mkSet(8,90),mkSet(8,90),mkSet(6,100)] },
-        { id: "u2", name: "Remada Cavalinho", primary: "lats", secondary: ["traps"], restSeconds: 120, sets: [mkSet(10,70),mkSet(10,70),mkSet(8,80)] },
-        { id: "u3", name: "Arnold Press", primary: "shoulders", restSeconds: 90, sets: [mkSet(10,22),mkSet(10,22)] },
-        { id: "u4", name: "Face Pull", primary: "shoulders", secondary: ["traps"], restSeconds: 60, sets: [mkSet(15,24),mkSet(15,24)] },
-        { id: "u5", name: "Abdominal Cabo", primary: "core", restSeconds: 60, sets: [mkSet(15,30),mkSet(15,30),mkSet(12,35)] },
-      ] },
-    { id: "d5", code: "D5", name: "ARMS · CORE", focus: "Braços · Core · Mobilidade",
-      exercises: [
-        { id: "a1", name: "Rosca Scott", primary: "biceps", restSeconds: 75, sets: [mkSet(10,25),mkSet(10,25),mkSet(8,28)] },
-        { id: "a2", name: "Tríceps Francês", primary: "triceps", restSeconds: 75, sets: [mkSet(10,24),mkSet(10,24),mkSet(8,26)] },
-        { id: "a3", name: "Rosca Inversa", primary: "forearms", secondary: ["biceps"], restSeconds: 60, sets: [mkSet(12,18),mkSet(12,18)] },
-        { id: "a4", name: "Mergulho Banco", primary: "triceps", restSeconds: 60, sets: [mkSet(12,0),mkSet(12,0)] },
-        { id: "a5", name: "Prancha Lastreada", primary: "core", secondary: ["obliques"], restSeconds: 45, sets: [mkSet(60,10),mkSet(60,10),mkSet(45,15)] },
-      ] },
+    {
+      id: "d-push-a", code: "PSH-A", name: "PUSH · Segunda",
+      focus: "Peito · Ombros · Tríceps + Esteira",
+      exercises: [...pushExercises("a"), cardioExercise("push-a")],
+    },
+    {
+      id: "d-pull-a", code: "PUL-A", name: "PULL + ABS · Terça",
+      focus: "Costas · Bíceps · Antebraço · Abdômen + Esteira",
+      exercises: [...pullExercises("a"), ...absExercises("a"), cardioExercise("pull-a")],
+    },
+    {
+      id: "d-legs", code: "LEGS", name: "LEGS · Quarta",
+      focus: "Quadríceps · Posterior · Glúteo · Ombros + Esteira",
+      exercises: [...legsExercises(), cardioExercise("legs")],
+    },
+    {
+      id: "d-push-b", code: "PSH-B", name: "PUSH + ABS · Quinta",
+      focus: "Peito · Ombros · Tríceps · Abdômen + Esteira",
+      exercises: [...pushExercises("b"), ...absExercises("b"), cardioExercise("push-b")],
+    },
+    {
+      id: "d-pull-b", code: "PUL-B", name: "PULL · Sexta",
+      focus: "Costas · Bíceps · Antebraço + Esteira",
+      exercises: [...pullExercises("b"), cardioExercise("pull-b")],
+    },
   ],
 };
 
 const seedSchedule: SupplementSlot[] = [
-  { id: "s1", time: "08:00", name: "Creatina Monohidratada", dose: "5g", note: "Micronizada", tone: "cyan", taken: true },
-  { id: "s2", time: "12:30", name: "Multivitamínico", dose: "1 cápsula", tone: "cyan", taken: true },
-  { id: "s3", time: "18:30", name: "Whey 3W · Morango c/ Ninho", dose: "30g + 250ml H₂O", tone: "matrix", taken: false },
-  { id: "s4", time: "22:00", name: "Magnésio Glicinato", dose: "300mg", tone: "cyan", taken: false },
+  { id: "s1", time: "08:00", name: "Creatina Monohidratada", dose: "5g", note: "Micronizada", tone: "cyan", taken: false },
+  { id: "s2", time: "18:30", name: "Whey Protein", dose: "30g + 250ml H₂O", tone: "matrix", taken: false },
 ];
 
 const seedInventory: InventoryItem[] = [
-  { id: "i1", name: "WHEY 3W",  remaining: 18, total: 30, tone: "matrix" },
-  { id: "i2", name: "CREATINA", remaining: 41, total: 60, tone: "cyan" },
-  { id: "i3", name: "MULTIVIT", remaining: 4,  total: 30, tone: "amber" },
+  { id: "i1", name: "WHEY",     remaining: 30, total: 30, tone: "matrix" },
+  { id: "i2", name: "CREATINA", remaining: 60, total: 60, tone: "cyan" },
 ];
 
-const seedMuscleVolume: Record<MuscleId, number> = {
-  chest: 0.72, shoulders: 0.58, biceps: 0.41, triceps: 0.52, forearms: 0.22,
-  core: 0.35, obliques: 0.18, quads: 0.85, hamstrings: 0.61, glutes: 0.55,
-  calves: 0.44, lats: 0.78, traps: 0.46, "lower-back": 0.31, neck: 0.0,
+const ZERO_MUSCLE_VOLUME: Record<MuscleId, number> = {
+  chest: 0, shoulders: 0, biceps: 0, triceps: 0, forearms: 0,
+  core: 0, obliques: 0, quads: 0, hamstrings: 0, glutes: 0,
+  calves: 0, lats: 0, traps: 0, "lower-back": 0, neck: 0,
 };
 
-const seedWeekdayMap: WeekdayMap = { 0: null, 1: "d1", 2: "d2", 3: "d3", 4: "d4", 5: "d5", 6: null };
+// SEG=push-a, TER=pull-a, QUA=legs, QUI=push-b, SEX=pull-b, SAB/DOM off
+const seedWeekdayMap: WeekdayMap = {
+  0: null, 1: "d-push-a", 2: "d-pull-a", 3: "d-legs",
+  4: "d-push-b", 5: "d-pull-b", 6: null,
+};
 
 const emptyActive: ActiveWorkout = {
   dayId: "d1", exerciseIndex: 0, setIndex: 0,
@@ -214,6 +258,10 @@ interface State {
   getElapsedMs: () => number;
   isPaused: () => boolean;
   hasActiveSession: () => boolean;
+  getSessionTelemetry: () => SessionTelemetry;
+
+  /* lifecycle */
+  wipeData: () => Promise<void>;
 
   /* cloud */
   hydrateFromCloud: () => Promise<void>;
@@ -284,15 +332,15 @@ export const useMarcolaStore = create<State>()(
       rest: { active: false, remaining: 0, total: 0 },
       schedule: seedSchedule,
       inventory: seedInventory,
-      muscleVolume: seedMuscleVolume,
+      muscleVolume: { ...ZERO_MUSCLE_VOLUME },
       weeklyVolume: {} as Record<MuscleId, number>,
       syncStatus: isSupabaseEnabled ? "idle" : "offline",
       lastSyncedAt: null,
-      lastWeekTonnage: 12.5,
+      lastWeekTonnage: 0,
       lastSummary: null,
       saturatedMap: {},
       ratingOverrides: {},
-      biometrics: { weightKg: null, heightCm: null, weightUpdatedAt: null },
+      biometrics: { weightKg: 76, heightCm: 178, weightUpdatedAt: new Date().toISOString() },
       history: {},
       seenSwipeHint: false,
 
@@ -344,6 +392,63 @@ export const useMarcolaStore = create<State>()(
         const a = get().active;
         return a.startedAt !== null && a.finishedAt === null;
       },
+
+      getSessionTelemetry: () => {
+        const { active, routine, lastSummary } = get();
+        const isLive = active.startedAt !== null && active.finishedAt === null;
+        if (isLive) {
+          let vol = 0, sets = 0;
+          for (const entry of active.log) {
+            if (entry.isWarmup) continue;
+            vol += entry.reps * entry.weight;
+            sets += 1;
+          }
+          return { volumeKg: Math.round(vol), sets, isLive: true };
+        }
+        if (lastSummary) {
+          return { volumeKg: lastSummary.tonnageKg, sets: lastSummary.setsCompleted, isLive: false };
+        }
+        // Fallback: last completed sets na rotina (carregadas via hydrate).
+        let vol = 0, sets = 0;
+        for (const day of routine.days) for (const ex of day.exercises) for (const s of ex.sets) {
+          if (s.completed && !s.isWarmup) { vol += s.reps * s.weight; sets += 1; }
+        }
+        return { volumeKg: Math.round(vol), sets, isLive: false };
+      },
+
+      wipeData: async () => {
+        // Limpa estado local + fila offline; preserva rotina/biométricos/suplementos.
+        if (typeof window !== "undefined") {
+          try { window.localStorage.removeItem("marcola-sync-queue-v1"); } catch { /* ignore */ }
+        }
+        set((s) => ({
+          active: { ...emptyActive, dayId: s.routine.days[0]?.id ?? null },
+          rest: { active: false, remaining: 0, total: 0 },
+          lastSummary: null,
+          muscleVolume: { ...ZERO_MUSCLE_VOLUME },
+          weeklyVolume: {} as Record<MuscleId, number>,
+          history: {},
+          routine: {
+            ...s.routine,
+            days: s.routine.days.map((d) => ({
+              ...d,
+              exercises: d.exercises.map((e) => ({
+                ...e,
+                sets: e.sets.map((st) => ({ ...st, completed: false })),
+              })),
+            })),
+          },
+        }));
+        // Remoto (Supabase) — best effort.
+        if (isSupabaseEnabled && supabase) {
+          const owner = await getOwnerId();
+          if (owner) {
+            await supabase.from("workout_logs").delete().eq("owner", owner);
+            await supabase.from("pr_achievements").delete().eq("owner", owner);
+          }
+        }
+      },
+
 
       /* ──────────── Cloud hydration ──────────── */
 
@@ -881,7 +986,7 @@ export const useMarcolaStore = create<State>()(
       markSwipeHintSeen: () => set({ seenSwipeHint: true }),
     }),
     {
-      name: "marcola-prime-store-v2",
+      name: "marcola-prime-store-v3",
       storage: createJSONStorage(() => (typeof window !== "undefined" ? window.localStorage : (undefined as never))),
       partialize: (s) => ({
         routine: s.routine,

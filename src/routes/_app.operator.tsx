@@ -2,10 +2,14 @@ import { createFileRoute } from "@tanstack/react-router";
 import { motion } from "framer-motion";
 import { useState } from "react";
 import {
-  AlertTriangle, User, Ruler, Scale, Hexagon, Trophy, Pencil, Check, X,
+  AlertTriangle, User, Ruler, Scale, Hexagon, Trophy, Pencil, Check, X, Trash2,
 } from "lucide-react";
 import { useMarcolaStore, type PRMedal, type MuscleId } from "@/store/marcola";
 import { toast } from "sonner";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 export const Route = createFileRoute("/_app/operator")({
   head: () => ({
@@ -30,6 +34,20 @@ function OperatorProfile() {
   const needsCalib = useMarcolaStore((s) => s.needsWeightCalibration());
   const daysSince = useMarcolaStore((s) => s.daysSinceWeightUpdate());
   const medals = useMarcolaStore((s) => s.getPRMedals());
+  const wipeData = useMarcolaStore((s) => s.wipeData);
+  const [wiping, setWiping] = useState(false);
+
+  const handleWipe = async () => {
+    setWiping(true);
+    try {
+      await wipeData();
+      toast.success("Sistema zerado", { description: "Logs, históricos e sessão local removidos." });
+    } catch {
+      toast.error("Falha parcial", { description: "Dados locais limpos; verifique conexão para sincronizar." });
+    } finally {
+      setWiping(false);
+    }
+  };
 
   const [editing, setEditing] = useState(false);
   const [draftWeight, setDraftWeight] = useState<string>(biometrics.weightKg?.toString() ?? "");
@@ -192,6 +210,49 @@ function OperatorProfile() {
             ))}
           </div>
         )}
+      </section>
+
+      {/* ─── Danger zone: ZERAR SISTEMA ─── */}
+      <section className="rounded-2xl border border-rose-500/30 bg-rose-500/5 p-3">
+        <div className="mb-2 flex items-center gap-2">
+          <AlertTriangle className="h-3 w-3 shrink-0 text-rose-400" />
+          <span className="font-mono-tactical text-[10px] tracking-[0.25em] text-rose-300">
+            DANGER ZONE
+          </span>
+        </div>
+        <p className="text-[11px] leading-snug text-muted-foreground">
+          Apaga logs de sets, histórico e sessão ativa. Rotina, biométricos e suplementos são preservados.
+        </p>
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <button
+              disabled={wiping}
+              className="font-mono-tactical mt-3 flex min-h-[42px] w-full items-center justify-center gap-2 rounded-lg bg-rose-500/20 text-[11px] tracking-[0.22em] text-rose-300 ring-1 ring-rose-500/40 hover:bg-rose-500/30 disabled:opacity-50"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              {wiping ? "ZERANDO…" : "ZERAR SISTEMA"}
+            </button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Zerar todos os logs?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Esta ação apaga permanentemente: workout logs, PRs registrados, histórico de sessões e
+                a fila offline. A rotina, biométricos e configurações de suplementos permanecem.
+                Não pode ser desfeito.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleWipe}
+                className="bg-rose-500 text-white hover:bg-rose-500/90"
+              >
+                Zerar
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </section>
     </main>
   );
