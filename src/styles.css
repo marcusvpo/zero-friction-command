@@ -134,7 +134,7 @@
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
-@utility scrollbar-none::-webkit-scrollbar { display: none; }
+.scrollbar-none::-webkit-scrollbar { display: none; }
 
 /* Glass surfaces — the new primary container */
 @utility glass {
