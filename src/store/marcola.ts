@@ -64,12 +64,28 @@ export interface ActiveWorkout {
 export interface RestTimer { active: boolean; remaining: number; total: number; }
 export type WeekdayMap = Record<number, string | null>;
 
+export interface SessionScore {
+  total: number;       // 0-100
+  execution: number;   // 0-100
+  overload: number;    // 0-100
+  volume: number;      // 0-100
+  density: number;     // 0-100
+}
+
 export interface SessionSummary {
   durationMs: number;
   tonnageKg: number;
   setsCompleted: number;
   warmupSets: number;
   prs: { exerciseId: string; exerciseName: string; weight: number; reps: number }[];
+  score: SessionScore;
+}
+
+export interface WeeklyTonnagePoint {
+  week: string;        // "W-5" .. "W0"
+  weekStart: string;   // ISO date of Monday
+  tonnageKg: number;
+  deltaPct: number;    // vs previous week, 0 if no prev
 }
 
 /** Persistido por libraryId. Quando hiddenUntil > now → saturado. */
