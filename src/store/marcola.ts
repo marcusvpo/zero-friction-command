@@ -119,8 +119,11 @@ const seedMuscleVolume: Record<MuscleId, number> = {
 
 /* ─────────────────────────────── Store ─────────────────────────────── */
 
+const seedWeekdayMap: WeekdayMap = { 0: null, 1: "d1", 2: "d2", 3: "d3", 4: "d4", 5: "d5", 6: null };
+
 interface State {
   routine: Routine;
+  weekdayMap: WeekdayMap;
   active: ActiveWorkout;
   rest: RestTimer;
   schedule: SupplementSlot[];
@@ -128,10 +131,12 @@ interface State {
   muscleVolume: Record<MuscleId, number>;
   syncStatus: "idle" | "syncing" | "ok" | "offline" | "error";
   lastSyncedAt: number | null;
+  lastWeekTonnage: number;
 
   /* selectors */
   getActiveDay: () => WorkoutDay | null;
   getActiveExercise: () => Exercise | null;
+  getTodayDay: () => WorkoutDay | null;
   getTonnage7d: () => number;
   getPRWatch: () => number;
   getAvgRest: () => number;
@@ -142,6 +147,8 @@ interface State {
   addExerciseToDay: (dayId: string) => void;
   removeExercise: (dayId: string, exerciseId: string) => void;
   renameExercise: (dayId: string, exerciseId: string, name: string) => void;
+  setSplit: (split: Routine["split"]) => void;
+  assignWeekday: (weekday: number, dayId: string | null) => void;
 
   startWorkout: (dayId: string) => void;
   finishWorkout: () => void;
@@ -149,6 +156,7 @@ interface State {
   nextExercise: () => void;
   prevExercise: () => void;
   selectExercise: (i: number) => void;
+  adjustCurrentSet: (field: "reps" | "weight", delta: number) => void;
   startRest: (seconds: number) => void;
   tickRest: () => void;
   skipRest: () => void;
@@ -161,6 +169,7 @@ export const useMarcolaStore = create<State>()(
   persist(
     (set, get) => ({
       routine: seedRoutine,
+      weekdayMap: seedWeekdayMap,
       active: { dayId: "d1", exerciseIndex: 0, setIndex: 0, startedAt: null, finishedAt: null, log: [] },
       rest: { active: false, remaining: 0, total: 0 },
       schedule: seedSchedule,
