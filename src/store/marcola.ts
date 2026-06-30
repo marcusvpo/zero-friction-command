@@ -239,7 +239,7 @@ const seedWeekdayMap: WeekdayMap = {
 };
 
 const emptyActive: ActiveWorkout = {
-  dayId: "d1", exerciseIndex: 0, setIndex: 0,
+  dayId: "d-push-a", exerciseIndex: 0, setIndex: 0,
   startedAt: null, finishedAt: null, pausedAt: null, totalPausedMs: 0, log: [],
 };
 
