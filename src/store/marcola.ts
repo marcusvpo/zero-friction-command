@@ -672,6 +672,34 @@ export const useMarcolaStore = create<State>()(
 
       bumpMuscleVolume: (muscle, amount) =>
         set((s) => ({ muscleVolume: { ...s.muscleVolume, [muscle]: Math.min(1, (s.muscleVolume[muscle] ?? 0) + amount) } })),
+
+      /* ──────────── Saturation & rating overrides ──────────── */
+
+      isSaturated: (libraryId) => {
+        const entry = get().saturatedMap[libraryId];
+        return !!entry && entry.hiddenUntil > Date.now();
+      },
+
+      markExerciseSaturated: (libraryId, weeks) => set((s) => ({
+        saturatedMap: {
+          ...s.saturatedMap,
+          [libraryId]: {
+            hiddenUntil: Date.now() + weeks * 7 * 24 * 60 * 60 * 1000,
+            markedAt: Date.now(),
+            weeks,
+          },
+        },
+      })),
+
+      unmarkSaturated: (libraryId) => set((s) => {
+        const next = { ...s.saturatedMap };
+        delete next[libraryId];
+        return { saturatedMap: next };
+      }),
+
+      setRatingOverride: (libraryId, override) => set((s) => ({
+        ratingOverrides: { ...s.ratingOverrides, [libraryId]: override },
+      })),
     }),
     {
       name: "marcola-prime-store-v2",
@@ -682,8 +710,9 @@ export const useMarcolaStore = create<State>()(
         schedule: s.schedule,
         inventory: s.inventory,
         muscleVolume: s.muscleVolume,
-        // Persist active session so user can resume draft after closing tab.
         active: s.active,
+        saturatedMap: s.saturatedMap,
+        ratingOverrides: s.ratingOverrides,
       }),
     },
   ),
