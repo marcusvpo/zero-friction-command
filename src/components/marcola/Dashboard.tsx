@@ -7,18 +7,24 @@ import { RestTimer } from "./RestTimer";
 import { Flame, Crosshair, Timer, Play, Calendar, TrendingUp, ArrowRight } from "lucide-react";
 import { motion } from "framer-motion";
 import { Link } from "@tanstack/react-router";
+import { useEffect } from "react";
 import { useMarcolaStore, WEEKDAY_LABELS, WEEKDAY_LONG } from "@/store/marcola";
 
 export function Dashboard() {
   const tonnage = useMarcolaStore((s) => s.getTonnage7d());
   const pr = useMarcolaStore((s) => s.getPRWatch());
   const avgRest = useMarcolaStore((s) => s.getAvgRest());
-  const muscleVolume = useMarcolaStore((s) => s.muscleVolume);
+  const weeklyVolume = useMarcolaStore((s) => s.weeklyVolume);
+  const fetchWeekly = useMarcolaStore((s) => s.fetchWeeklyVolume);
   const todayDay = useMarcolaStore((s) => s.getTodayDay());
   const lastWeekTonnage = useMarcolaStore((s) => s.lastWeekTonnage);
   const startWorkout = useMarcolaStore((s) => s.startWorkout);
   const weekdayMap = useMarcolaStore((s) => s.weekdayMap);
   const routine = useMarcolaStore((s) => s.routine);
+
+  // Pull real workout volume from Supabase on mount; the heatmap re-renders
+  // automatically as completeCurrentSet bumps it optimistically.
+  useEffect(() => { void fetchWeekly(); }, [fetchWeekly]);
 
   const dow = new Date().getDay();
   const todayLabel = WEEKDAY_LONG[dow];
