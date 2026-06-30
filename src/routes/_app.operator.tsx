@@ -2,10 +2,14 @@ import { createFileRoute } from "@tanstack/react-router";
 import { motion } from "framer-motion";
 import { useState } from "react";
 import {
-  AlertTriangle, User, Ruler, Scale, Hexagon, Trophy, Pencil, Check, X,
+  AlertTriangle, User, Ruler, Scale, Hexagon, Trophy, Pencil, Check, X, Trash2,
 } from "lucide-react";
 import { useMarcolaStore, type PRMedal, type MuscleId } from "@/store/marcola";
 import { toast } from "sonner";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 export const Route = createFileRoute("/_app/operator")({
   head: () => ({
