@@ -249,12 +249,34 @@ function WorkoutConsole() {
           /* ─────── GPS EXECUTION ─────── */
           <motion.section
             key={`ex-${exercise.id}-${active.setIndex}`}
+            drag="x"
+            dragDirectionLock
+            dragConstraints={{ left: 0, right: 0 }}
+            dragElastic={0.25}
+            onDragEnd={handleDragEnd}
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -12 }}
             transition={{ type: "spring", stiffness: 220, damping: 24 }}
-            className="glass-strong flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl p-3"
+            className="glass-strong relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl p-3 touch-pan-y"
           >
+            {/* Swipe hint */}
+            <AnimatePresence>
+              {hintVisible && (
+                <motion.div
+                  initial={{ opacity: 0, y: -8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-center justify-center gap-2 rounded-t-2xl bg-cyan/10 py-1.5 text-cyan ring-1 ring-cyan/30"
+                >
+                  <Hand className="h-3 w-3" />
+                  <span className="font-mono-tactical text-[9px] tracking-[0.25em]">
+                    ← PULAR · CONFIRMAR →
+                  </span>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
             {/* Header */}
             <header className="flex items-center justify-between gap-2">
               <NavBtn onClick={prev} aria-label="Exercício anterior"><ChevronLeft className="h-5 w-5" /></NavBtn>
@@ -267,7 +289,34 @@ function WorkoutConsole() {
               <NavBtn onClick={next} aria-label="Próximo exercício"><ChevronRight className="h-5 w-5" /></NavBtn>
             </header>
 
-            {/* (sem imagem — design data-first) */}
+            {/* Smart Overload banner */}
+            {suggestion && (
+              <button
+                onClick={() => {
+                  // Pull current values toward suggestion
+                  const wDelta = Math.round((suggestion.weight - currentSet.weight) / 2.5);
+                  const rDelta = suggestion.reps - currentSet.reps;
+                  for (let i = 0; i < Math.abs(wDelta); i++) adjust("weight", wDelta > 0 ? 1 : -1);
+                  for (let i = 0; i < Math.abs(rDelta); i++) adjust("reps", rDelta > 0 ? 1 : -1);
+                }}
+                className={`mt-2 flex w-full items-center justify-between gap-2 rounded-lg px-3 py-1.5 ring-1 transition-colors ${
+                  isSmartMatch
+                    ? "bg-matrix/15 ring-matrix/60"
+                    : "bg-cyan/5 ring-cyan/25 hover:bg-cyan/10"
+                }`}
+              >
+                <span className="flex items-center gap-1.5">
+                  <Sparkles className={`h-3 w-3 ${isSmartMatch ? "text-matrix" : "text-cyan"}`} />
+                  <span className={`font-mono-tactical text-[10px] tracking-widest ${isSmartMatch ? "text-matrix" : "text-cyan"}`}>
+                    META · {suggestion.weight}kg × {suggestion.reps}
+                  </span>
+                </span>
+                <span className="font-mono-tactical flex items-center gap-1 text-[9px] tracking-widest text-muted-foreground">
+                  {suggestion.deltaKg > 0 && <TrendingUp className="h-3 w-3 text-matrix" />}
+                  {suggestion.label}
+                </span>
+              </button>
+            )}
 
             {/* Set indicator */}
             <div className="mt-2 flex items-center justify-center gap-1">
@@ -292,10 +341,10 @@ function WorkoutConsole() {
               </button>
             </div>
 
-            {/* Steppers */}
+            {/* Steppers (memo'd) */}
             <div className="mt-2 grid grid-cols-2 gap-2">
-              <Stepper label="PESO" unit="kg" value={currentSet.weight} onMinus={() => adjust("weight", -1)} onPlus={() => adjust("weight", +1)} tone="cyan" />
-              <Stepper label="REPS" unit="reps" value={currentSet.reps} onMinus={() => adjust("reps", -1)} onPlus={() => adjust("reps", +1)} tone="matrix" />
+              <MemoStepper label="PESO" unit="kg" value={currentSet.weight} onMinus={() => adjust("weight", -1)} onPlus={() => adjust("weight", +1)} tone="cyan" />
+              <MemoStepper label="REPS" unit="reps" value={currentSet.reps} onMinus={() => adjust("reps", -1)} onPlus={() => adjust("reps", +1)} tone="matrix" />
             </div>
 
             {/* Target */}
@@ -335,18 +384,26 @@ function WorkoutConsole() {
               })}
             </div>
 
-            {/* CONFIRM SET — sticky inside card */}
+            {/* CONFIRM SET — verde sólido em match, gradiente caso contrário */}
             <motion.button
               whileTap={{ scale: 0.98 }}
               disabled={isPaused}
               onClick={handleConfirm}
-              className="mt-2 flex min-h-[60px] w-full items-center justify-center gap-3 overflow-hidden rounded-xl bg-gradient-to-r from-matrix via-cyan to-matrix text-background disabled:opacity-50"
-              style={{ boxShadow: "0 0 32px rgba(57,255,20,0.5)" }}
+              className={`relative mt-2 flex min-h-[60px] w-full items-center justify-center gap-3 overflow-hidden rounded-xl text-background disabled:opacity-50 ${
+                isSmartMatch
+                  ? "bg-matrix"
+                  : "bg-gradient-to-r from-matrix via-cyan to-matrix"
+              }`}
+              style={{
+                boxShadow: isSmartMatch
+                  ? "0 0 44px rgba(57,255,20,0.85), inset 0 0 18px rgba(57,255,20,0.4)"
+                  : "0 0 32px rgba(57,255,20,0.5)",
+              }}
             >
               <span className="absolute inset-0 bg-[linear-gradient(120deg,transparent,rgba(255,255,255,0.35),transparent)] bg-[length:200%_100%] animate-[shimmer_3s_linear_infinite]" />
               <Check className="relative h-5 w-5" strokeWidth={3} />
               <span className="font-mono-tactical relative text-sm font-bold uppercase tracking-[0.25em]">
-                {isPaused ? "Pausado" : "Confirm Set"}
+                {isPaused ? "Pausado" : isSmartMatch ? "PR · CONFIRMAR" : "Confirm Set"}
               </span>
             </motion.button>
           </motion.section>
