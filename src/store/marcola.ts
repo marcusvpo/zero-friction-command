@@ -379,6 +379,7 @@ export const useMarcolaStore = create<State>()(
       storage: createJSONStorage(() => (typeof window !== "undefined" ? window.localStorage : (undefined as never))),
       partialize: (s) => ({
         routine: s.routine,
+        weekdayMap: s.weekdayMap,
         schedule: s.schedule,
         inventory: s.inventory,
         muscleVolume: s.muscleVolume,
