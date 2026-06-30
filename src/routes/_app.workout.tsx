@@ -555,22 +555,6 @@ function WorkoutConsole() {
   );
 }
 
-function getElapsedMs(a: { startedAt: number | null; finishedAt: number | null; pausedAt: number | null; totalPausedMs: number }) {
-  if (!a.startedAt) return 0;
-  const end = a.finishedAt ?? Date.now();
-  const pausedExtra = a.pausedAt ? Date.now() - a.pausedAt : 0;
-  return Math.max(0, end - a.startedAt - a.totalPausedMs - pausedExtra);
-}
-
-function formatElapsed(ms: number) {
-  const s = Math.floor(ms / 1000);
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const sec = s % 60;
-  if (h > 0) return `${h}:${String(m).padStart(2,"0")}:${String(sec).padStart(2,"0")}`;
-  return `${String(m).padStart(2,"0")}:${String(sec).padStart(2,"0")}`;
-}
-
 function nextLabel(day: { exercises: { name: string; sets: { completed: boolean }[] }[] }, active: { exerciseIndex: number; setIndex: number }) {
   const ex = day.exercises[active.exerciseIndex];
   if (!ex) return "—";
