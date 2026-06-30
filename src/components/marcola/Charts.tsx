@@ -11,6 +11,7 @@ import {
   ComposedChart,
 } from "recharts";
 import { useMarcolaStore } from "@/store/marcola";
+import { useShallow } from "zustand/react/shallow";
 
 const volumeData = [
   { m: "PEITO", v: 18 },
@@ -42,7 +43,7 @@ const tooltipStyle = {
  * Bars = absolute tonnage (kg); Line = Δ% vs previous week.
  */
 export function DeltaChart6w() {
-  const weeks = useMarcolaStore((s) => s.getWeeklyTonnage6w());
+  const weeks = useMarcolaStore(useShallow((s) => s.getWeeklyTonnage6w()));
   const hasData = weeks.some((w) => w.tonnageKg > 0);
 
   if (!hasData) {
