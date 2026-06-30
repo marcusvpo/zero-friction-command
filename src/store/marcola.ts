@@ -38,7 +38,6 @@ export interface Exercise {
   tempo?: string; targetRPE?: number; notes?: string;
   /** Optional pointer to the library entry this exercise came from. */
   libraryId?: string;
-  image?: string;
 }
 export interface WorkoutDay {
   id: string; code: string; name: string; focus: string; exercises: Exercise[];
