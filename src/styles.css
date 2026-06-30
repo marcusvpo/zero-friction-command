@@ -148,7 +148,7 @@
 
 /* Legacy aliases for existing components — now route to glass */
 @utility panel { @apply glass; }
-@utility panel-corners { /* deprecated — no-op in new system */ }
+@utility panel-corners { position: relative; }
 
 @utility shadow-glow-cyan {
   box-shadow:
