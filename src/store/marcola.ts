@@ -658,12 +658,6 @@ export const useMarcolaStore = create<State>()(
           });
         }
       },
-                weeklyVolume: { ...st.weeklyVolume, [ex.primary]: Math.max(0, (st.weeklyVolume[ex.primary] ?? 1) - 1) },
-              }));
-            }
-          });
-        }
-      },
 
       nextExercise: () => set((s) => {
         const day = s.getActiveDay(); if (!day) return s;
