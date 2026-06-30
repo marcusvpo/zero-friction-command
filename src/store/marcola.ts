@@ -225,6 +225,12 @@ interface State {
 
   toggleSupplement: (id: string) => Promise<void>;
   bumpMuscleVolume: (muscle: MuscleId, amount: number) => void;
+
+  /* saturation + ratings */
+  isSaturated: (libraryId: string) => boolean;
+  markExerciseSaturated: (libraryId: string, weeks: number) => void;
+  unmarkSaturated: (libraryId: string) => void;
+  setRatingOverride: (libraryId: string, override: RatingOverride) => void;
 }
 
 export const useMarcolaStore = create<State>()(
