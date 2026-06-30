@@ -27,7 +27,7 @@ let queue: QueueItem[] = [];
 const listeners = new Set<Listener>();
 let initialized = false;
 let flushing = false;
-let timer: ReturnType<typeof setInterval> | null = null;
+let timer: number | null = null;
 
 function load() {
   if (typeof window === "undefined") return;
