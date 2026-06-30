@@ -237,12 +237,7 @@ function WorkoutConsole() {
               <NavBtn onClick={next} aria-label="Próximo exercício"><ChevronRight className="h-5 w-5" /></NavBtn>
             </header>
 
-            {/* Exercise image (if from library) */}
-            {exercise.image && (
-              <div className="mx-auto mt-2 grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-lg bg-black ring-1 ring-cyan/20 sm:h-24 sm:w-24">
-                <img src={exercise.image} alt="" className="h-full w-full object-contain" width={96} height={96} loading="lazy" />
-              </div>
-            )}
+            {/* (sem imagem — design data-first) */}
 
             {/* Set indicator */}
             <div className="mt-2 flex items-center justify-center gap-1">
