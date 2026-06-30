@@ -429,7 +429,8 @@ export const useMarcolaStore = create<State>()(
           }
         });
       },
-      },
+
+
 
       nextExercise: () => set((s) => {
         const day = s.getActiveDay(); if (!day) return s;
