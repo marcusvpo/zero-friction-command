@@ -10,7 +10,7 @@ import {
   fetchWeeklyVolume as fetchWeeklyVolumeRemote,
   type WorkoutLogRow,
 } from "@/lib/db";
-import { isSupabaseEnabled } from "@/lib/supabase";
+import { isSupabaseEnabled, supabase, getOwnerId } from "@/lib/supabase";
 import { getLibraryExercise } from "@/lib/exercise-library";
 import { enqueueWorkoutLog } from "@/lib/sync-queue";
 
