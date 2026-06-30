@@ -1,30 +1,37 @@
 import { Panel } from "./Panel";
 import { TonnageChart, VolumeChart, FatigueChart } from "./Charts";
 import { SupplementTimeline } from "./SupplementTimeline";
-import { AnatomicalBody } from "./AnatomicalBody";
+import { AnatomyHeatmap } from "./AnatomyHeatmap";
 import { QuickLogDrawer } from "./QuickLogDrawer";
+import { RestTimer } from "./RestTimer";
 import { Flame, Crosshair, Timer, TrendingUp } from "lucide-react";
 import { motion } from "framer-motion";
+import { useMarcolaStore } from "@/store/marcola";
 
 export function Dashboard() {
+  const tonnage = useMarcolaStore((s) => s.getTonnage7d());
+  const pr = useMarcolaStore((s) => s.getPRWatch());
+  const avgRest = useMarcolaStore((s) => s.getAvgRest());
+  const muscleVolume = useMarcolaStore((s) => s.muscleVolume);
+
   return (
     <main className="relative z-10 flex-1 space-y-4 px-4 pt-2 pb-28">
-      {/* Quick log launcher */}
       <QuickLogDrawer />
 
-      {/* Hero KPI strip */}
+      {/* Live rest timer (visible whenever active) */}
+      <RestTimer />
+
       <motion.section
         initial="hidden"
         animate="show"
         variants={{ show: { transition: { staggerChildren: 0.08, delayChildren: 0.05 } } }}
         className="grid grid-cols-3 gap-2.5"
       >
-        <KpiCard label="Tonelagem" value="12.4" unit="t" icon={Flame} tone="cyan" delta="+8.2%" />
-        <KpiCard label="PR Watch" value="03" unit="alv" icon={Crosshair} tone="emerald" delta="armado" />
-        <KpiCard label="Rest Avg" value="92" unit="s" icon={Timer} tone="amber" delta="−4s" />
+        <KpiCard label="Tonelagem" value={tonnage.toFixed(1)} unit="t" icon={Flame} tone="cyan" delta="+8.2%" />
+        <KpiCard label="PR Watch" value={String(pr).padStart(2, "0")} unit="alv" icon={Crosshair} tone="emerald" delta="armado" />
+        <KpiCard label="Rest Avg" value={String(avgRest)} unit="s" icon={Timer} tone="amber" delta="−4s" />
       </motion.section>
 
-      {/* Tonnage */}
       <Panel title="Tonelagem · 7d" code="M4.2" status="ACTIVE">
         <TonnageChart />
         <div className="mt-3 flex items-center justify-between border-t border-border/60 pt-3">
@@ -33,21 +40,19 @@ export function Dashboard() {
           </span>
           <span className="flex items-center gap-1.5 text-foreground">
             <TrendingUp className="h-3.5 w-3.5 text-emerald-400" />
-            <span className="font-mono-tactical text-sm font-medium">57.200 kg</span>
+            <span className="font-mono-tactical text-sm font-medium">{(tonnage * 1000).toLocaleString("pt-BR")} kg</span>
           </span>
         </div>
       </Panel>
 
-      {/* Body + Volume */}
       <Panel title="Mapa Anatômico" code="M4.1" status="ACTIVE">
-        <AnatomicalBody />
+        <AnatomyHeatmap data={muscleVolume} />
       </Panel>
 
       <Panel title="Volume por Grupo" code="sets/7d" status="OK">
         <VolumeChart />
       </Panel>
 
-      {/* Fatigue */}
       <Panel title="Índice de Fadiga" code="M4.4" status="WARN">
         <FatigueChart />
         <div className="mt-3 grid grid-cols-5 gap-1.5 border-t border-border/60 pt-3">
@@ -70,7 +75,6 @@ export function Dashboard() {
         </div>
       </Panel>
 
-      {/* Supplement Logistics */}
       <Panel title="Logística · Suplementação" code="M5" status="OK">
         <SupplementTimeline />
       </Panel>
@@ -85,25 +89,16 @@ export function Dashboard() {
 }
 
 const TONE_MAP = {
-  cyan:    { text: "text-cyan",          ring: "ring-cyan/20",          icon: "text-cyan" },
-  emerald: { text: "text-emerald-400",   ring: "ring-emerald-400/20",   icon: "text-emerald-400" },
-  amber:   { text: "text-amber",         ring: "ring-amber/20",         icon: "text-amber" },
+  cyan:    { text: "text-cyan",        icon: "text-cyan" },
+  emerald: { text: "text-emerald-400", icon: "text-emerald-400" },
+  amber:   { text: "text-amber",       icon: "text-amber" },
 } as const;
 
 function KpiCard({
-  label,
-  value,
-  unit,
-  icon: Icon,
-  tone,
-  delta,
+  label, value, unit, icon: Icon, tone, delta,
 }: {
-  label: string;
-  value: string;
-  unit: string;
-  icon: typeof Flame;
-  tone: keyof typeof TONE_MAP;
-  delta: string;
+  label: string; value: string; unit: string;
+  icon: typeof Flame; tone: keyof typeof TONE_MAP; delta: string;
 }) {
   const t = TONE_MAP[tone];
   return (
