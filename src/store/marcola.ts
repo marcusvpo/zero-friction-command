@@ -38,7 +38,6 @@ export interface Exercise {
   tempo?: string; targetRPE?: number; notes?: string;
   /** Optional pointer to the library entry this exercise came from. */
   libraryId?: string;
-  image?: string;
 }
 export interface WorkoutDay {
   id: string; code: string; name: string; focus: string; exercises: Exercise[];
@@ -69,6 +68,12 @@ export interface SessionSummary {
   setsCompleted: number;
   warmupSets: number;
   prs: { exerciseId: string; exerciseName: string; weight: number; reps: number }[];
+}
+
+/** Persistido por libraryId. Quando hiddenUntil > now → saturado. */
+export interface SaturationEntry { hiddenUntil: number; markedAt: number; weeks: number }
+export interface RatingOverride {
+  stars: number; rationale: string; source: "deep-research"; updatedAt: string;
 }
 
 export const WEEKDAY_LABELS = ["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SÁB"];
@@ -165,6 +170,8 @@ interface State {
   lastSyncedAt: number | null;
   lastWeekTonnage: number;
   lastSummary: SessionSummary | null;
+  saturatedMap: Record<string, SaturationEntry>;
+  ratingOverrides: Record<string, RatingOverride>;
 
   /* selectors */
   getActiveDay: () => WorkoutDay | null;
@@ -217,6 +224,12 @@ interface State {
 
   toggleSupplement: (id: string) => Promise<void>;
   bumpMuscleVolume: (muscle: MuscleId, amount: number) => void;
+
+  /* saturation + ratings */
+  isSaturated: (libraryId: string) => boolean;
+  markExerciseSaturated: (libraryId: string, weeks: number) => void;
+  unmarkSaturated: (libraryId: string) => void;
+  setRatingOverride: (libraryId: string, override: RatingOverride) => void;
 }
 
 export const useMarcolaStore = create<State>()(
@@ -234,6 +247,8 @@ export const useMarcolaStore = create<State>()(
       lastSyncedAt: null,
       lastWeekTonnage: 12.5,
       lastSummary: null,
+      saturatedMap: {},
+      ratingOverrides: {},
 
       getActiveDay: () => {
         const { routine, active } = get();
@@ -377,7 +392,6 @@ export const useMarcolaStore = create<State>()(
                 restSeconds: lib.defaultRestSeconds,
                 tempo: lib.defaultTempo,
                 libraryId: lib.id,
-                image: lib.image,
                 sets: [mkSet(10, 0), mkSet(10, 0), mkSet(10, 0)],
               }],
             }),
@@ -401,7 +415,7 @@ export const useMarcolaStore = create<State>()(
                 restSeconds: lib.defaultRestSeconds,
                 tempo: lib.defaultTempo,
                 libraryId: lib.id,
-                image: lib.image,
+                
               }),
             }),
           },
@@ -657,6 +671,34 @@ export const useMarcolaStore = create<State>()(
 
       bumpMuscleVolume: (muscle, amount) =>
         set((s) => ({ muscleVolume: { ...s.muscleVolume, [muscle]: Math.min(1, (s.muscleVolume[muscle] ?? 0) + amount) } })),
+
+      /* ──────────── Saturation & rating overrides ──────────── */
+
+      isSaturated: (libraryId) => {
+        const entry = get().saturatedMap[libraryId];
+        return !!entry && entry.hiddenUntil > Date.now();
+      },
+
+      markExerciseSaturated: (libraryId, weeks) => set((s) => ({
+        saturatedMap: {
+          ...s.saturatedMap,
+          [libraryId]: {
+            hiddenUntil: Date.now() + weeks * 7 * 24 * 60 * 60 * 1000,
+            markedAt: Date.now(),
+            weeks,
+          },
+        },
+      })),
+
+      unmarkSaturated: (libraryId) => set((s) => {
+        const next = { ...s.saturatedMap };
+        delete next[libraryId];
+        return { saturatedMap: next };
+      }),
+
+      setRatingOverride: (libraryId, override) => set((s) => ({
+        ratingOverrides: { ...s.ratingOverrides, [libraryId]: override },
+      })),
     }),
     {
       name: "marcola-prime-store-v2",
@@ -667,8 +709,9 @@ export const useMarcolaStore = create<State>()(
         schedule: s.schedule,
         inventory: s.inventory,
         muscleVolume: s.muscleVolume,
-        // Persist active session so user can resume draft after closing tab.
         active: s.active,
+        saturatedMap: s.saturatedMap,
+        ratingOverrides: s.ratingOverrides,
       }),
     },
   ),

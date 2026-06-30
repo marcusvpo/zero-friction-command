@@ -1,106 +1,123 @@
+## Objetivo
 
-# Phase 6 — Workout 360º + Exercise Library
+Reformular a Biblioteca de Exercícios: visual data-first (sem fotos), ~120 exercícios variados por equipamento, sistema de rating 5★ "Gym Tok" curado + deep research sob demanda, e fluxo robusto de "trocar exercício saturado" no `/workout`.
 
-## 1. Desligar DEBUG_MODE do heatmap
-- `src/components/marcola/AnatomyHeatmap.tsx`: flip `DEBUG_MODE = false`. Remover stroke vermelho residual.
+---
 
-## 2. /workout — enquadramento e UX
+## 1. Limpeza de Imagens
 
-Problema atual: o botão fixo `CONFIRM SET` (bottom-24) sobrepõe a lista de exercícios em viewports curtos; o dock inferior + alturas fixas estouram em telas pequenas; o "ENCERRAR" some quando o cartão de set é muito alto.
+- Deletar `src/assets/library/*.jpg` (12 arquivos gerados anteriormente).
+- Remover todos os `import xxx from "@/assets/library/..."` de `src/lib/exercise-library.ts`.
+- Remover prop `image` do tipo `LibraryExercise` e qualquer `<img>` em `src/routes/_app.library.tsx`.
 
-Mudanças em `src/routes/_app.workout.tsx`:
-- Trocar layout principal por flex column com `h-[100dvh] overflow-hidden` e seções com `min-h-0` + `overflow-auto` apenas onde necessário (lista de exercícios).
-- Mover o CTA `CONFIRM SET` para dentro do cartão (não mais `fixed`), garantindo que nunca colida com o BottomDock; sticky-bottom dentro do cartão com safe-area-inset-bottom.
-- Day-selector strip vira `grid grid-cols-5` em ≥sm e scroll horizontal só em mobile estreito.
-- Stepper: reduzir altura mínima para caber em 667px de altura; fonte do valor em `clamp(2rem, 8vw, 3rem)`.
-- Lista de exercícios compacta com altura máxima dinâmica `max-h-[min(40vh,18rem)]`.
-- Novo header tático com cronômetro total de sessão + status (ATIVO / PAUSADO).
+## 2. Novo Visual da Biblioteca (sem fotos)
 
-Novos controles de sessão (botões no header da tela):
-- **Pausar / Retomar**: pausa cronômetro total e bloqueia CONFIRM SET. Adiciona `pausedAt` e `totalPausedMs` em `ActiveWorkout`.
-- **Salvar rascunho**: persiste `active` no Supabase (tabela `workout_drafts`, 1 por usuário). Ao abrir /workout, oferece "Continuar sessão de X min atrás".
-- **Descartar**: confirm dialog destrutivo, limpa `active` + draft.
-- **Finalizar com resumo**: modal com tonelagem total, PRs batidos (peso > maior peso anterior do exercício), duração líquida (descontando pausas), sets completos. Salva sessão fechada em `workout_sessions`.
+Cada card de exercício passa a exibir:
 
-## 3. Cadastro de set/exercício — campos novos
-
-`Exercise` (em `src/store/marcola.ts`) ganha:
-- `tempo?: string` (ex: "3-1-1-0")
-- `targetRPE?: number`
-- `notes?: string` (já existe)
-
-`ExerciseSet` ganha:
-- `isWarmup?: boolean` (não conta tonelagem nem volume semanal)
-- `restSeconds?: number` (override por set; cai pro `exercise.restSeconds` quando vazio)
-- `notes?: string`
-- `rpe?: number` (já existe — agora captado no CONFIRM SET)
-
-UI:
-- Drawer "Configurar set" (long-press no stepper ou ícone ⋮): edita rest, marca warm-up, RPE alvo.
-- Após CONFIRM SET, drawer rápido opcional para RPE real (1–10) + nota; auto-dispensa em 2s se ignorado.
-- Builder (`/builder`): editor de exercício com tempo, RPE alvo, descanso, sets warm-up.
-
-## 4. Biblioteca de Exercícios
-
-### Dados
-Novo arquivo `src/lib/exercise-library.ts` com ~30 exercícios canônicos cobrindo os 5 dias do split atual + clássicos por grupo. Cada item:
-```ts
-{ id, name, primary: MuscleId, secondary[], equipment: "barbell"|"dumbbell"|"cable"|"machine"|"bodyweight",
-  difficulty: 1|2|3, instructions: string[], imageUrl: string }
+```text
+┌─────────────────────────────┐
+│ [ícone equipamento]   ★4.6 │
+│ Supino Reto Barra           │
+│ PEITO · ombros, tríceps    │
+│ ● ● ● dificuldade           │
+└─────────────────────────────┘
 ```
 
-### Imagens (IA, estilo neon anatômico)
-Gerar ~30 imagens 1024×1024 via `imagegen--generate_image` (premium para legibilidade do gesto), prompt-base consistente: silhueta humana wireframe ciano sobre fundo preto, halteres/barras em neon verde matrix, traços táticos, sem texto. Upload para CDN via `lovable-assets create`, salvar pointers em `src/assets/library/<id>.png.asset.json`. Importar no array.
+- Ícone do equipamento via `lucide-react` (Dumbbell, Cable, etc.) + chip colorido.
+- Músculo primário destacado em cyan; secundários em muted.
+- Estrelas (★) renderizadas com Lucide `Star`/`StarHalf`.
+- Detalhe (sheet) inclui mini-diagrama anatômico SVG reaproveitando o `AnatomyHeatmap` (modo `highlightOnly`) destacando músculos atingidos — sem geração de imagem.
 
-### Tela `/library` (`src/routes/_app.library.tsx`)
-- Grid 2 col mobile / 4 col desktop.
-- Filtros chip: grupo muscular (15 botões), equipamento (5 chips), busca por nome.
-- Card: imagem + nome + músculo primário + chips de secundários.
-- Tap → bottom-sheet com imagem grande, instruções passo-a-passo, e dois CTAs:
-  - **Adicionar ao dia →** picker D1/D2/D3/D4/D5 → cria Exercise com `restSeconds`, `tempo` padrão do template, 3 sets default.
-  - **Substituir exercício atual** (só visível se vier de /workout via state) → swap mantendo histórico de sets.
+## 3. Catálogo de ~120 Exercícios
 
-### Integração com /workout
-- Botão "Trocar exercício" no header do cartão → navega para /library com `?swap=<exerciseId>&day=<dayId>`.
-- Botão "+ Adicionar" no fim da lista de exercícios do dia → /library.
+Novo `src/lib/exercise-library.ts` agrupado por **equipamento**:
 
-## 5. Persistência Supabase
+- **Peso Livre — Barra** (~20): supino reto/inclinado/declinado, agachamento livre/front, levantamento terra convencional/sumô, stiff, remada curvada, desenvolvimento militar, rosca direta, etc.
+- **Peso Livre — Halter** (~25): supino halter, crucifixo, desenvolvimento Arnold, elevações (lateral, frontal, posterior), remada serrote, agachamento goblet, búlgaro, rosca alternada/martelo/concentrada, tríceps francês, etc.
+- **Máquinas Articuladas** (~25): leg press 45°, hack, cadeira extensora/flexora, mesa flexora, adutora/abdutora, supino máquina, voador (peck deck), pulldown, remada sentada máquina, panturrilha sentado/em pé, abdominal máquina, etc.
+- **Polia / Cabos** (~20): puxada alta (pronada/supinada/neutra), remada baixa, crossover alto/médio/baixo, tríceps corda/barra/unilateral, rosca polia, face pull, pull-through, abdução cabo, woodchopper.
+- **Peso Corporal / Calistenia** (~15): barra fixa (pronada/supinada/neutra), paralelas, flexão (normal/diamante/declinada), muscle-up, pistol squat, abdominal solo, prancha, hiperextensão, dips.
+- **Cardio/Funcional** (~15): kettlebell swing, farmer's walk, sled push, jump rope, box jump, burpee, mountain climber, battle rope, air bike, esteira HIIT.
 
-Migrações novas (após aprovação do plano):
-- `workout_drafts` (owner uuid PK, payload jsonb, updated_at) — RLS por owner.
-- `workout_sessions` (id, owner, day_id, started_at, finished_at, total_paused_ms, tonnage_kg, prs jsonb, sets_completed int) — RLS por owner.
-- Não é preciso tabela para a biblioteca: dados estáticos no bundle.
+Novo schema:
 
-Store (`src/store/marcola.ts`):
-- `pauseSession()`, `resumeSession()`, `saveDraft()`, `loadDraft()`, `discardSession()`, `finishWorkoutWithSummary(): SummaryStats`.
-- `getElapsedMs()`: `now - startedAt - totalPausedMs - (pausedAt? now-pausedAt:0)`.
-- `swapExercise(dayId, exerciseId, fromLibraryId)`.
-- `addLibraryExerciseToDay(dayId, libraryId)`.
+```ts
+type Rating = { stars: number; sampleSize: number; source: "curated" | "deep-research"; updatedAt: string; rationale: string };
 
-## Arquivos tocados
-- `src/components/marcola/AnatomyHeatmap.tsx` (debug off)
-- `src/routes/_app.workout.tsx` (relayout + controles + drawers)
-- `src/routes/_app.library.tsx` (novo)
-- `src/routes/_app.builder.tsx` (campos extras)
-- `src/components/marcola/SetConfigDrawer.tsx` (novo)
-- `src/components/marcola/SessionSummaryModal.tsx` (novo)
-- `src/components/marcola/BottomDock.tsx` (link Library)
-- `src/store/marcola.ts` (state machine + drafts + summary)
-- `src/lib/exercise-library.ts` (novo)
-- `src/lib/db.ts` (drafts + sessions)
-- `src/assets/library/*.png.asset.json` (~30 pointers)
-- `supabase/marcola_schema.sql` (drafts + sessions + grants + RLS)
+interface LibraryExercise {
+  id: string;
+  name: string;
+  equipment: Equipment;       // 'barbell'|'dumbbell'|'machine'|'cable'|'bodyweight'|'cardio'
+  machineName?: string;       // "Leg Press 45°", "Smith", null se peso livre
+  primary: MuscleId;
+  secondary: MuscleId[];
+  difficulty: 1|2|3;
+  defaultRestSeconds: number;
+  defaultTempo: string;
+  shortDescription: string;   // 1-2 linhas, exibido no card e topo do sheet
+  instructions: string[];
+  cues: string[];             // dicas técnicas curtas
+  rating: Rating;             // notas iniciais curadas (1 pesquisa manual condensada)
+  tags?: string[];            // "compound", "isolador", "unilateral", "explosivo"
+}
+```
 
-## Ordem de execução
-1. Migração Supabase (drafts + sessions).
-2. Store: novos campos + actions + cronômetro pausável.
-3. Tipos `Exercise`/`ExerciseSet` estendidos sem quebrar seeds.
-4. /workout relayout + controles de sessão + summary modal.
-5. SetConfigDrawer + captura de RPE real.
-6. Biblioteca: gerar imagens IA (lote), upload assets, dados, tela /library, integração swap/add.
-7. Builder: campos extras (tempo, warm-up, RPE alvo).
-8. DEBUG_MODE = false.
+## 4. Rating 5★ "Gym Tok" (Híbrido)
 
-## Confirmações necessárias antes de implementar
-- OK gerar ~30 imagens em modo **premium** (~30 créditos)? Posso reduzir pra 15 cobrindo só os exercícios do split atual + 5 extras por grupo se preferir economia.
-- OK criar tabelas `workout_drafts` e `workout_sessions` no Supabase existente (mesmo schema/usuário)?
+**Notas iniciais curadas** (estáticas no arquivo) baseadas em consenso de referências fitness reconhecidas (Jeff Nippard, Mike Israetel/RP, Eugene Teo, Chris Bumstead) sintetizado pelo agente em um único passo — sem custo recorrente.
+
+**Refresh sob demanda** via Perplexity:
+
+- Server fn `refreshExerciseRating` em `src/lib/exercise-ratings.functions.ts` chamando Perplexity `sonar-deep-research` com prompt focado em "comunidade fitness TikTok/Instagram, eficácia hipertrófica, popularidade, segurança" → retorna `{ stars, rationale, sampleSize }`.
+- Persistido em nova tabela `exercise_ratings` (Supabase): `exercise_id text pk, owner uuid, stars numeric, rationale text, source text, updated_at timestamptz` + RLS por owner + GRANTs. Não fazemos seed; tabela só guarda overrides.
+- Botão "Atualizar rating (deep research)" no sheet de detalhe; loading state + toast.
+- Requer conector Perplexity ativado; checagem amigável se ausente.
+
+## 5. "Trocar Exercício Saturado" no /workout
+
+Três peças coordenadas:
+
+### 5a. Botão "Sugerir alternativa"
+- Em cada exercício do `/workout`, ação rápida → navega para `/library?swap=<id>&day=<id>&filter=primary` com lista pré-filtrada pelo `primary` muscle.
+- Ordenação default: `stars desc, sampleSize desc`, ocultando exercícios marcados como "saturado" ainda vigentes.
+
+### 5b. Saturação
+- Nova ação `markExerciseSaturated(exerciseLibId, weeks)` no store; persistida em `exercise_saturation` (Supabase) ou localStorage fallback.
+- Tabela: `exercise_id text, owner uuid, hidden_until timestamptz, reason text`.
+- Toggle "Marcar como saturado por: 2 / 4 / 8 semanas" no sheet de detalhe e no card do `/workout`.
+
+### 5c. Histórico de rotação por slot
+- Novo store-derived: `slotHistory[dayId][slotIndex] = [{ libId, weeksUsed }]`.
+- Quando um slot fica ≥4 semanas no mesmo `libId`, exibir badge "♻ Considere variar" no card do `/workout` com CTA → mesma rota de sugestão acima.
+- Cálculo a partir dos `workout_logs` existentes (group by week/exerciseId).
+
+## 6. Detalhe Técnico
+
+Arquivos novos:
+- `src/lib/exercise-ratings.functions.ts` — server fn Perplexity (protegida com `requireSupabaseAuth`).
+- `src/components/marcola/ExerciseRatingStars.tsx` — render ★/☆ + tooltip rationale.
+- `src/components/marcola/MiniMuscleMap.tsx` — SVG compacto reutilizando paths de `AnatomyHeatmap`.
+- Migração SQL: `supabase/migrations/<timestamp>_exercise_ratings_and_saturation.sql` (2 tabelas + GRANTs + RLS).
+
+Arquivos alterados:
+- `src/lib/exercise-library.ts` — schema novo + 120 exercícios + ratings curados.
+- `src/routes/_app.library.tsx` — remover `<img>`, novos cards, filtro por equipamento expandido, suporte a `?filter=primary`, ordenação por rating, ocultar saturados.
+- `src/routes/_app.workout.tsx` — botões "Sugerir alternativa" + "Marcar saturado" + badge de rotação.
+- `src/store/marcola.ts` — actions `markExerciseSaturated`, `unmarkSaturated`, selectors `getActiveAlternatives`, `getSlotRotationHint`.
+
+Secrets: `PERPLEXITY_API_KEY` via conector (não pedir manualmente; instruir conexão se faltar).
+
+## 7. Validação
+
+- Build TS limpo (schema novo bate com store).
+- `/library` renderiza 120 itens, filtros e estrelas; nenhum 404 de imagem.
+- `/workout` "Sugerir alternativa" abre biblioteca filtrada e swap funciona.
+- Marcar saturado oculta exercício até `hidden_until`.
+- Refresh de rating persiste em `exercise_ratings` e atualiza UI (somente se Perplexity conectado).
+
+---
+
+## Perguntas em aberto (decido sozinho se não responder)
+
+- **Sem Perplexity conectado:** mostro estado curado + botão desabilitado com tooltip "Conecte Perplexity para deep research". Posso já incluir o fluxo de conexão na primeira tentativa.
+- **Migração Supabase:** vou criar as 2 tabelas via `supabase/migrations/` (não Lovable Cloud, conforme regra do workspace). Confirma?

@@ -149,10 +149,17 @@ function WorkoutConsole() {
           EX {String(active.exerciseIndex + 1).padStart(2,"0")}/{String(day.exercises.length).padStart(2,"0")} · {day.code}
         </span>
         <button
-          onClick={() => navigate({ to: "/library", search: { swap: exercise?.id ?? "", day: day.id } as never })}
+          onClick={() => navigate({
+            to: "/library",
+            search: {
+              swap: exercise?.id ?? "",
+              day: day.id,
+              muscle: exercise?.primary ?? "",
+            } as never,
+          })}
           className="font-mono-tactical flex items-center gap-1 text-[10px] tracking-widest text-cyan hover:text-cyan/80"
         >
-          <LibraryIcon className="h-3 w-3" /> TROCAR / +
+          <LibraryIcon className="h-3 w-3" /> SUGERIR ALTERNATIVA
         </button>
       </div>
 
@@ -230,12 +237,7 @@ function WorkoutConsole() {
               <NavBtn onClick={next} aria-label="Próximo exercício"><ChevronRight className="h-5 w-5" /></NavBtn>
             </header>
 
-            {/* Exercise image (if from library) */}
-            {exercise.image && (
-              <div className="mx-auto mt-2 grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-lg bg-black ring-1 ring-cyan/20 sm:h-24 sm:w-24">
-                <img src={exercise.image} alt="" className="h-full w-full object-contain" width={96} height={96} loading="lazy" />
-              </div>
-            )}
+            {/* (sem imagem — design data-first) */}
 
             {/* Set indicator */}
             <div className="mt-2 flex items-center justify-center gap-1">
