@@ -400,6 +400,10 @@ export const useMarcolaStore = create<State>()(
         set({
           routine: { ...s.routine, days: newDays },
           muscleVolume: vol,
+          weeklyVolume: {
+            ...s.weeklyVolume,
+            [ex.primary]: (s.weeklyVolume[ex.primary] ?? 0) + 1,
+          },
           active: {
             ...s.active,
             setIndex: moreSets ? setIdx + 1 : 0,
@@ -409,12 +413,22 @@ export const useMarcolaStore = create<State>()(
           rest: { active: true, remaining: ex.restSeconds, total: ex.restSeconds },
         });
 
-        // Fire-and-forget cloud push
+        // Fire-and-forget cloud push; rollback weeklyVolume on failure.
         void pushWorkoutLog({
           exercise_id: ex.id, exercise_name: ex.name, primary_muscle: ex.primary,
           set_index: setIdx, reps: updatedSet.reps, weight: updatedSet.weight,
           rpe: updatedSet.rpe ?? null, performed_at: new Date().toISOString(),
+        }).then((ok) => {
+          if (!ok) {
+            set((st) => ({
+              weeklyVolume: {
+                ...st.weeklyVolume,
+                [ex.primary]: Math.max(0, (st.weeklyVolume[ex.primary] ?? 1) - 1),
+              },
+            }));
+          }
         });
+      },
       },
 
       nextExercise: () => set((s) => {
