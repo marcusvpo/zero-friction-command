@@ -594,7 +594,7 @@ function CtrlBtn({ children, onClick, "aria-label": ariaLabel, tone }: { childre
   );
 }
 
-function Stepper({
+const MemoStepper = memo(function Stepper({
   label, unit, value, onMinus, onPlus, tone,
 }: { label: string; unit: string; value: number; onMinus: () => void; onPlus: () => void; tone: "cyan" | "matrix" }) {
   const color = tone === "cyan" ? "text-cyan" : "text-matrix";
@@ -623,4 +623,4 @@ function Stepper({
       </div>
     </div>
   );
-}
+});
