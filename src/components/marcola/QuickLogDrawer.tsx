@@ -37,18 +37,18 @@ export function QuickLogDrawer() {
       <Drawer.Trigger asChild>
         <button
           {...bind()}
-          className="panel panel-corners group relative flex w-full items-center justify-between rounded-sm px-3 py-2 text-left touch-none select-none transition-transform active:scale-[0.97]"
+          className="glass group relative flex w-full items-center justify-between rounded-2xl px-4 py-3 text-left touch-none select-none transition-transform active:scale-[0.98]"
           aria-label="Abrir registro rápido"
           style={{ transform: `translateX(${Math.max(-12, Math.min(12, swipeHint / 8))}px)` }}
         >
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             <span className="pulse-dot inline-block h-1.5 w-1.5 rounded-full bg-cyan text-cyan" />
-            <span className="font-mono-tactical text-[10px] tracking-[0.3em] text-cyan glow-cyan">
-              QUICK LOG · M0
+            <span className="text-[11px] font-medium tracking-wide text-foreground">
+              Registro rápido
             </span>
           </div>
-          <span className="font-mono-tactical text-[9px] tracking-widest text-muted-foreground">
-            TAP · SWIPE →
+          <span className="font-mono-tactical text-[9px] tracking-[0.2em] text-muted-foreground">
+            tap · swipe →
           </span>
         </button>
       </Drawer.Trigger>

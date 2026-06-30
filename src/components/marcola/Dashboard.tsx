@@ -3,12 +3,12 @@ import { TonnageChart, VolumeChart, FatigueChart } from "./Charts";
 import { SupplementTimeline } from "./SupplementTimeline";
 import { AnatomicalBody } from "./AnatomicalBody";
 import { QuickLogDrawer } from "./QuickLogDrawer";
-import { Flame, Crosshair, Timer } from "lucide-react";
+import { Flame, Crosshair, Timer, TrendingUp } from "lucide-react";
 import { motion } from "framer-motion";
 
 export function Dashboard() {
   return (
-    <main className="relative z-10 flex-1 space-y-3 px-3 py-4">
+    <main className="relative z-10 flex-1 space-y-4 px-4 pt-2 pb-28">
       {/* Quick log launcher */}
       <QuickLogDrawer />
 
@@ -17,49 +17,51 @@ export function Dashboard() {
         initial="hidden"
         animate="show"
         variants={{ show: { transition: { staggerChildren: 0.08, delayChildren: 0.05 } } }}
-        className="grid grid-cols-3 gap-2"
+        className="grid grid-cols-3 gap-2.5"
       >
-        <KpiCard label="TONELAGEM" value="12.4" unit="T" icon={Flame} tone="cyan" delta="+8.2%" />
-        <KpiCard label="PR WATCH" value="03" unit="ALV" icon={Crosshair} tone="matrix" delta="ARMADO" />
-        <KpiCard label="REST AVG" value="92" unit="s" icon={Timer} tone="amber" delta="-4s" />
+        <KpiCard label="Tonelagem" value="12.4" unit="t" icon={Flame} tone="cyan" delta="+8.2%" />
+        <KpiCard label="PR Watch" value="03" unit="alv" icon={Crosshair} tone="emerald" delta="armado" />
+        <KpiCard label="Rest Avg" value="92" unit="s" icon={Timer} tone="amber" delta="−4s" />
       </motion.section>
 
       {/* Tonnage */}
-      <Panel title="TONELAGEM · 7d" code="M4.2" status="ACTIVE">
+      <Panel title="Tonelagem · 7d" code="M4.2" status="ACTIVE">
         <TonnageChart />
-        <div className="mt-2 flex items-center justify-between border-t border-border pt-2">
-          <span className="font-mono-tactical text-[9px] uppercase tracking-widest text-muted-foreground">
-            Σ TOTAL · SEMANA
+        <div className="mt-3 flex items-center justify-between border-t border-border/60 pt-3">
+          <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+            Σ Semana
           </span>
-          <span className="font-mono-tactical glow-cyan text-sm text-cyan">57.200 kg</span>
+          <span className="flex items-center gap-1.5 text-foreground">
+            <TrendingUp className="h-3.5 w-3.5 text-emerald-400" />
+            <span className="font-mono-tactical text-sm font-medium">57.200 kg</span>
+          </span>
         </div>
       </Panel>
 
-      {/* Heatmap + Volume */}
-      <div className="grid grid-cols-1 gap-3">
-        <Panel title="MAPA ANATÔMICO" code="M4.1" status="ACTIVE">
-          <AnatomicalBody />
-        </Panel>
+      {/* Body + Volume */}
+      <Panel title="Mapa Anatômico" code="M4.1" status="ACTIVE">
+        <AnatomicalBody />
+      </Panel>
 
-        <Panel title="VOLUME · GRUPO" code="SETS/7d" status="OK">
-          <VolumeChart />
-        </Panel>
-      </div>
+      <Panel title="Volume por Grupo" code="sets/7d" status="OK">
+        <VolumeChart />
+      </Panel>
 
       {/* Fatigue */}
-      <Panel title="ÍNDICE DE FADIGA" code="M4.4" status="WARN">
+      <Panel title="Índice de Fadiga" code="M4.4" status="WARN">
         <FatigueChart />
-        <div className="mt-2 grid grid-cols-5 gap-1 border-t border-border pt-2">
+        <div className="mt-3 grid grid-cols-5 gap-1.5 border-t border-border/60 pt-3">
           {["SEG", "TER", "QUA", "QUI", "SEX"].map((d, i) => {
             const levels = [12, 24, 38, 56, 71];
             const f = levels[i];
-            const tone = f < 30 ? "matrix" : f < 60 ? "cyan" : "amber";
+            const tone =
+              f < 30 ? "text-emerald-400" : f < 60 ? "text-cyan" : "text-amber";
             return (
               <div key={d} className="text-center">
-                <div className={`font-mono-tactical text-[9px] tracking-widest text-${tone} glow-${tone}`}>
+                <div className={`font-mono-tactical text-[11px] font-medium tracking-tight ${tone}`}>
                   {f}%
                 </div>
-                <div className="font-mono-tactical text-[8px] tracking-widest text-muted-foreground">
+                <div className="mt-0.5 font-mono-tactical text-[9px] tracking-widest text-muted-foreground/70">
                   {d}
                 </div>
               </div>
@@ -69,18 +71,24 @@ export function Dashboard() {
       </Panel>
 
       {/* Supplement Logistics */}
-      <Panel title="LOGÍSTICA · SUPLEMENTAÇÃO" code="M5" status="OK">
+      <Panel title="Logística · Suplementação" code="M5" status="OK">
         <SupplementTimeline />
       </Panel>
 
-      <footer className="pt-2 pb-1 text-center">
-        <span className="font-mono-tactical text-[9px] uppercase tracking-[0.3em] text-muted-foreground">
-          MARCOLA PRIME · v1.0 · PHASE 1 SHELL
+      <footer className="pt-2 text-center">
+        <span className="font-mono-tactical text-[9px] uppercase tracking-[0.28em] text-muted-foreground/60">
+          marcola prime · v1.0
         </span>
       </footer>
     </main>
   );
 }
+
+const TONE_MAP = {
+  cyan:    { text: "text-cyan",          ring: "ring-cyan/20",          icon: "text-cyan" },
+  emerald: { text: "text-emerald-400",   ring: "ring-emerald-400/20",   icon: "text-emerald-400" },
+  amber:   { text: "text-amber",         ring: "ring-amber/20",         icon: "text-amber" },
+} as const;
 
 function KpiCard({
   label,
@@ -94,14 +102,10 @@ function KpiCard({
   value: string;
   unit: string;
   icon: typeof Flame;
-  tone: "cyan" | "matrix" | "amber";
+  tone: keyof typeof TONE_MAP;
   delta: string;
 }) {
-  const toneText = {
-    cyan: "text-cyan glow-cyan",
-    matrix: "text-matrix glow-matrix",
-    amber: "text-amber glow-amber",
-  }[tone];
+  const t = TONE_MAP[tone];
   return (
     <motion.div
       variants={{
@@ -109,22 +113,23 @@ function KpiCard({
         show:   { opacity: 1, y: 0, transition: { type: "spring", stiffness: 220, damping: 22 } },
       }}
       whileHover={{ y: -2 }}
-      className="panel panel-corners rounded-sm p-2"
+      className="glass rounded-2xl p-3"
     >
       <div className="flex items-center justify-between">
-        <span className="font-mono-tactical text-[9px] uppercase tracking-widest text-muted-foreground">
+        <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
           {label}
         </span>
-        <Icon className={`h-3 w-3 ${toneText}`} />
+        <Icon className={`h-3.5 w-3.5 ${t.icon}`} />
       </div>
-      <div className="mt-1 flex items-baseline gap-1">
-        <span className={`font-mono-tactical text-xl leading-none ${toneText}`}>{value}</span>
-        <span className="font-mono-tactical text-[10px] text-muted-foreground">{unit}</span>
+      <div className="mt-2 flex items-baseline gap-1">
+        <span className="font-mono-tactical text-xl font-semibold leading-none tracking-tight text-foreground">
+          {value}
+        </span>
+        <span className="text-[10px] text-muted-foreground">{unit}</span>
       </div>
-      <div className={`font-mono-tactical mt-0.5 text-[9px] tracking-widest ${toneText}`}>
-        ▲ {delta}
+      <div className={`mt-1.5 font-mono-tactical text-[10px] tracking-tight ${t.text}`}>
+        {delta}
       </div>
     </motion.div>
   );
 }
-
