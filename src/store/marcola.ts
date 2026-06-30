@@ -43,6 +43,10 @@ export interface ActiveWorkout {
   log: { exerciseId: string; setIndex: number; weight: number; reps: number; ts: number }[];
 }
 export interface RestTimer { active: boolean; remaining: number; total: number; }
+export type WeekdayMap = Record<number, string | null>; // 0=Sun..6=Sat → dayId
+
+export const WEEKDAY_LABELS = ["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SÁB"];
+export const WEEKDAY_LONG  = ["Domingo","Segunda","Terça","Quarta","Quinta","Sexta","Sábado"];
 
 /* ───────────────────────── Seed Data (5-day split) ───────────────────────── */
 
