@@ -149,10 +149,17 @@ function WorkoutConsole() {
           EX {String(active.exerciseIndex + 1).padStart(2,"0")}/{String(day.exercises.length).padStart(2,"0")} · {day.code}
         </span>
         <button
-          onClick={() => navigate({ to: "/library", search: { swap: exercise?.id ?? "", day: day.id } as never })}
+          onClick={() => navigate({
+            to: "/library",
+            search: {
+              swap: exercise?.id ?? "",
+              day: day.id,
+              muscle: exercise?.primary ?? "",
+            } as never,
+          })}
           className="font-mono-tactical flex items-center gap-1 text-[10px] tracking-widest text-cyan hover:text-cyan/80"
         >
-          <LibraryIcon className="h-3 w-3" /> TROCAR / +
+          <LibraryIcon className="h-3 w-3" /> SUGERIR ALTERNATIVA
         </button>
       </div>
 
