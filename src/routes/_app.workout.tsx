@@ -279,13 +279,13 @@ function nextLabel(day: { exercises: { name: string; sets: { completed: boolean 
   return nxt ? `${nxt.name} · Set 1` : "Sessão completa";
 }
 
-function NavBtn({ children, onClick, ...rest }: { children: React.ReactNode; onClick: () => void } & React.ButtonHTMLAttributes<HTMLButtonElement>) {
+function NavBtn({ children, onClick, "aria-label": ariaLabel }: { children: React.ReactNode; onClick: () => void; "aria-label"?: string }) {
   return (
     <motion.button
       whileTap={{ scale: 0.92 }}
       onClick={onClick}
+      aria-label={ariaLabel}
       className="glass grid h-12 w-12 shrink-0 place-items-center rounded-xl text-foreground hover:text-cyan"
-      {...rest}
     >
       {children}
     </motion.button>
