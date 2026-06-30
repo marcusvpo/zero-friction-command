@@ -92,6 +92,18 @@ export interface PRMedal {
   reps: number;
 }
 
+export interface OverloadSuggestion {
+  weight: number;
+  reps: number;
+  deltaKg: number;
+  reason: "first-time" | "increase-load" | "increase-reps" | "hold";
+  label: string;
+}
+
+const COMPOUND_MUSCLES = new Set<MuscleId>([
+  "chest", "quads", "lats", "glutes", "hamstrings", "lower-back",
+]);
+
 export const WEEKDAY_LABELS = ["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SÁB"];
 export const WEEKDAY_LONG  = ["Domingo","Segunda","Terça","Quarta","Quinta","Sexta","Sábado"];
 
@@ -189,6 +201,8 @@ interface State {
   saturatedMap: Record<string, SaturationEntry>;
   ratingOverrides: Record<string, RatingOverride>;
   biometrics: Biometrics;
+  history: Record<string, WorkoutLogRow[]>;
+  seenSwipeHint: boolean;
 
   /* selectors */
   getActiveDay: () => WorkoutDay | null;
@@ -253,6 +267,12 @@ interface State {
   daysSinceWeightUpdate: () => number | null;
   needsWeightCalibration: () => boolean;
   getPRMedals: () => PRMedal[];
+
+  /* smart overload + ux */
+  loadHistory: () => Promise<void>;
+  getSuggestion: (exerciseId: string) => OverloadSuggestion | null;
+  adjustRestForRPE: (rpe: number) => void;
+  markSwipeHintSeen: () => void;
 }
 
 export const useMarcolaStore = create<State>()(
