@@ -393,6 +393,63 @@ export const useMarcolaStore = create<State>()(
         return a.startedAt !== null && a.finishedAt === null;
       },
 
+      getSessionTelemetry: () => {
+        const { active, routine, lastSummary } = get();
+        const isLive = active.startedAt !== null && active.finishedAt === null;
+        if (isLive) {
+          let vol = 0, sets = 0;
+          for (const entry of active.log) {
+            if (entry.isWarmup) continue;
+            vol += entry.reps * entry.weight;
+            sets += 1;
+          }
+          return { volumeKg: Math.round(vol), sets, isLive: true };
+        }
+        if (lastSummary) {
+          return { volumeKg: lastSummary.tonnageKg, sets: lastSummary.setsCompleted, isLive: false };
+        }
+        // Fallback: last completed sets na rotina (carregadas via hydrate).
+        let vol = 0, sets = 0;
+        for (const day of routine.days) for (const ex of day.exercises) for (const s of ex.sets) {
+          if (s.completed && !s.isWarmup) { vol += s.reps * s.weight; sets += 1; }
+        }
+        return { volumeKg: Math.round(vol), sets, isLive: false };
+      },
+
+      wipeData: async () => {
+        // Limpa estado local + fila offline; preserva rotina/biométricos/suplementos.
+        if (typeof window !== "undefined") {
+          try { window.localStorage.removeItem("marcola-sync-queue-v1"); } catch { /* ignore */ }
+        }
+        set((s) => ({
+          active: { ...emptyActive, dayId: s.routine.days[0]?.id ?? null },
+          rest: { active: false, remaining: 0, total: 0 },
+          lastSummary: null,
+          muscleVolume: { ...ZERO_MUSCLE_VOLUME },
+          weeklyVolume: {} as Record<MuscleId, number>,
+          history: {},
+          routine: {
+            ...s.routine,
+            days: s.routine.days.map((d) => ({
+              ...d,
+              exercises: d.exercises.map((e) => ({
+                ...e,
+                sets: e.sets.map((st) => ({ ...st, completed: false })),
+              })),
+            })),
+          },
+        }));
+        // Remoto (Supabase) — best effort.
+        if (isSupabaseEnabled && supabase) {
+          const owner = await getOwnerId();
+          if (owner) {
+            await supabase.from("workout_logs").delete().eq("owner", owner);
+            await supabase.from("pr_achievements").delete().eq("owner", owner);
+          }
+        }
+      },
+
+
       /* ──────────── Cloud hydration ──────────── */
 
       hydrateFromCloud: async () => {
