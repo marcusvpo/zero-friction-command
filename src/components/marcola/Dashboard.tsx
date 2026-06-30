@@ -2,17 +2,27 @@ import { Panel } from "./Panel";
 import { TonnageChart, VolumeChart, FatigueChart } from "./Charts";
 import { SupplementTimeline } from "./SupplementTimeline";
 import { AnatomicalBody } from "./AnatomicalBody";
+import { QuickLogDrawer } from "./QuickLogDrawer";
 import { Flame, Crosshair, Timer } from "lucide-react";
+import { motion } from "framer-motion";
 
 export function Dashboard() {
   return (
     <main className="relative z-10 flex-1 space-y-3 px-3 py-4">
+      {/* Quick log launcher */}
+      <QuickLogDrawer />
+
       {/* Hero KPI strip */}
-      <section className="grid grid-cols-3 gap-2">
+      <motion.section
+        initial="hidden"
+        animate="show"
+        variants={{ show: { transition: { staggerChildren: 0.08, delayChildren: 0.05 } } }}
+        className="grid grid-cols-3 gap-2"
+      >
         <KpiCard label="TONELAGEM" value="12.4" unit="T" icon={Flame} tone="cyan" delta="+8.2%" />
         <KpiCard label="PR WATCH" value="03" unit="ALV" icon={Crosshair} tone="matrix" delta="ARMADO" />
         <KpiCard label="REST AVG" value="92" unit="s" icon={Timer} tone="amber" delta="-4s" />
-      </section>
+      </motion.section>
 
       {/* Tonnage */}
       <Panel title="TONELAGEM · 7d" code="M4.2" status="ACTIVE">

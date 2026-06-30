@@ -35,10 +35,9 @@ export function QuickLogDrawer() {
   return (
     <Drawer.Root open={open} onOpenChange={setOpen}>
       <Drawer.Trigger asChild>
-        <motion.button
+        <button
           {...bind()}
-          whileTap={{ scale: 0.96 }}
-          className="panel panel-corners group relative flex w-full items-center justify-between rounded-sm px-3 py-2 text-left touch-none select-none"
+          className="panel panel-corners group relative flex w-full items-center justify-between rounded-sm px-3 py-2 text-left touch-none select-none transition-transform active:scale-[0.97]"
           aria-label="Abrir registro rápido"
           style={{ transform: `translateX(${Math.max(-12, Math.min(12, swipeHint / 8))}px)` }}
         >
@@ -51,7 +50,7 @@ export function QuickLogDrawer() {
           <span className="font-mono-tactical text-[9px] tracking-widest text-muted-foreground">
             TAP · SWIPE →
           </span>
-        </motion.button>
+        </button>
       </Drawer.Trigger>
       <Drawer.Portal>
         <Drawer.Overlay className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm" />
