@@ -3,14 +3,16 @@ import { persist, createJSONStorage } from "zustand/middleware";
 import {
   saveRoutine,
   fetchRoutine,
-  pushWorkoutLog,
+  fetchRecentLogs,
   fetchInventory,
   fetchSchedule,
   setSupplementTaken,
   fetchWeeklyVolume as fetchWeeklyVolumeRemote,
+  type WorkoutLogRow,
 } from "@/lib/db";
 import { isSupabaseEnabled } from "@/lib/supabase";
 import { getLibraryExercise } from "@/lib/exercise-library";
+import { enqueueWorkoutLog } from "@/lib/sync-queue";
 
 /* ─────────────────────────────── Types ─────────────────────────────── */
 
