@@ -8,15 +8,9 @@ import {
   BarChart,
   Bar,
   Tooltip,
+  ComposedChart,
 } from "recharts";
-
-const tonnageData = [
-  { d: "SEG", t: 11.2 },
-  { d: "TER", t: 12.8 },
-  { d: "QUA", t: 10.4 },
-  { d: "QUI", t: 13.6 },
-  { d: "SEX", t: 9.2 },
-];
+import { useMarcolaStore } from "@/store/marcola";
 
 const volumeData = [
   { m: "PEITO", v: 18 },
@@ -25,14 +19,6 @@ const volumeData = [
   { m: "OMBROS", v: 14 },
   { m: "BRAÇO", v: 16 },
   { m: "CORE", v: 9 },
-];
-
-const fatigueData = [
-  { d: "SEG", f: 12 },
-  { d: "TER", f: 24 },
-  { d: "QUA", f: 38 },
-  { d: "QUI", f: 56 },
-  { d: "SEX", f: 71 },
 ];
 
 const axisStyle = {
@@ -51,35 +37,82 @@ const tooltipStyle = {
   padding: "4px 8px",
 };
 
-export function TonnageChart() {
+/**
+ * DeltaChart6w — Real 6-week tonnage trend with delta % line.
+ * Bars = absolute tonnage (kg); Line = Δ% vs previous week.
+ */
+export function DeltaChart6w() {
+  const weeks = useMarcolaStore((s) => s.getWeeklyTonnage6w());
+  const hasData = weeks.some((w) => w.tonnageKg > 0);
+
+  if (!hasData) {
+    return (
+      <div className="grid h-40 w-full place-items-center rounded-lg bg-white/[0.02] text-center">
+        <div>
+          <div className="font-mono-tactical text-[10px] tracking-widest text-muted-foreground">
+            SEM DADOS HISTÓRICOS
+          </div>
+          <div className="mt-1 text-[11px] text-muted-foreground/70">
+            Conclua uma sessão para iniciar o tracking de tonelagem.
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const data = weeks.map((w) => ({
+    week: w.week,
+    tonnageT: +(w.tonnageKg / 1000).toFixed(2),
+    deltaPct: w.deltaPct,
+  }));
+
   return (
-    <div className="h-40 w-full">
+    <div className="h-44 w-full">
       <ResponsiveContainer>
-        <LineChart data={tonnageData} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
+        <ComposedChart data={data} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
           <defs>
-            <linearGradient id="ton" x1="0" y1="0" x2="1" y2="0">
-              <stop offset="0%" stopColor="#00F0FF" />
-              <stop offset="100%" stopColor="#39FF14" />
+            <linearGradient id="bar-ton" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#00F0FF" stopOpacity={0.95} />
+              <stop offset="100%" stopColor="#00F0FF" stopOpacity={0.35} />
             </linearGradient>
           </defs>
           <CartesianGrid stroke="oklch(0.25 0.02 260)" strokeDasharray="2 4" vertical={false} />
-          <XAxis dataKey="d" tick={axisStyle} axisLine={{ stroke: "oklch(0.3 0.02 260)" }} tickLine={false} />
-          <YAxis tick={axisStyle} axisLine={false} tickLine={false} width={32} />
-          <Tooltip contentStyle={tooltipStyle} cursor={{ stroke: "#00F0FF", strokeOpacity: 0.3 }} />
-          <Line
-            type="monotone"
-            dataKey="t"
-            stroke="url(#ton)"
-            strokeWidth={2}
-            dot={{ r: 3, fill: "#00F0FF", stroke: "#00F0FF" }}
-            activeDot={{ r: 5, fill: "#00F0FF", stroke: "#000", strokeWidth: 2 }}
-            style={{ filter: "drop-shadow(0 0 4px #00F0FF)" }}
+          <XAxis dataKey="week" tick={axisStyle} axisLine={{ stroke: "oklch(0.3 0.02 260)" }} tickLine={false} />
+          <YAxis yAxisId="ton" tick={axisStyle} axisLine={false} tickLine={false} width={32} />
+          <YAxis yAxisId="delta" orientation="right" tick={axisStyle} axisLine={false} tickLine={false} width={32} />
+          <Tooltip
+            contentStyle={tooltipStyle}
+            cursor={{ fill: "rgba(0,240,255,0.06)" }}
+            formatter={(value: number, name: string) => {
+              if (name === "tonnageT") return [`${value.toFixed(2)} t`, "Tonelagem"];
+              if (name === "deltaPct") return [`${value > 0 ? "+" : ""}${value.toFixed(1)}%`, "Δ vs semana ant."];
+              return [value, name];
+            }}
           />
-        </LineChart>
+          <Bar
+            yAxisId="ton"
+            dataKey="tonnageT"
+            fill="url(#bar-ton)"
+            radius={[2, 2, 0, 0]}
+            style={{ filter: "drop-shadow(0 0 3px #00F0FF)" }}
+          />
+          <Line
+            yAxisId="delta"
+            type="monotone"
+            dataKey="deltaPct"
+            stroke="#39FF14"
+            strokeWidth={2}
+            dot={{ r: 3, fill: "#39FF14" }}
+            style={{ filter: "drop-shadow(0 0 4px #39FF14)" }}
+          />
+        </ComposedChart>
       </ResponsiveContainer>
     </div>
   );
 }
+
+/** Backwards-compatible alias — used to be the mocked 7-day chart. */
+export const TonnageChart = DeltaChart6w;
 
 export function VolumeChart() {
   return (
@@ -92,29 +125,6 @@ export function VolumeChart() {
           <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "rgba(0,240,255,0.05)" }} />
           <Bar dataKey="v" fill="#00F0FF" radius={[1, 1, 0, 0]} style={{ filter: "drop-shadow(0 0 3px #00F0FF)" }} />
         </BarChart>
-      </ResponsiveContainer>
-    </div>
-  );
-}
-
-export function FatigueChart() {
-  return (
-    <div className="h-32 w-full">
-      <ResponsiveContainer>
-        <LineChart data={fatigueData} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
-          <CartesianGrid stroke="oklch(0.25 0.02 260)" strokeDasharray="2 4" vertical={false} />
-          <XAxis dataKey="d" tick={axisStyle} axisLine={{ stroke: "oklch(0.3 0.02 260)" }} tickLine={false} />
-          <YAxis tick={axisStyle} axisLine={false} tickLine={false} width={32} domain={[0, 100]} />
-          <Tooltip contentStyle={tooltipStyle} cursor={{ stroke: "#FFB300", strokeOpacity: 0.3 }} />
-          <Line
-            type="monotone"
-            dataKey="f"
-            stroke="#FFB300"
-            strokeWidth={2}
-            dot={{ r: 3, fill: "#FFB300" }}
-            style={{ filter: "drop-shadow(0 0 4px #FFB300)" }}
-          />
-        </LineChart>
       </ResponsiveContainer>
     </div>
   );
