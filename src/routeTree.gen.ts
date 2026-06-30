@@ -12,8 +12,10 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as AppIndexRouteImport } from './routes/_app.index'
 import { Route as AppWorkoutRouteImport } from './routes/_app.workout'
+import { Route as AppOperatorRouteImport } from './routes/_app.operator'
 import { Route as AppLogisticsRouteImport } from './routes/_app.logistics'
 import { Route as AppLibraryRouteImport } from './routes/_app.library'
+import { Route as AppIntelRouteImport } from './routes/_app.intel'
 import { Route as AppBuilderRouteImport } from './routes/_app.builder'
 
 const AppRoute = AppRouteImport.update({
@@ -30,6 +32,11 @@ const AppWorkoutRoute = AppWorkoutRouteImport.update({
   path: '/workout',
   getParentRoute: () => AppRoute,
 } as any)
+const AppOperatorRoute = AppOperatorRouteImport.update({
+  id: '/operator',
+  path: '/operator',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppLogisticsRoute = AppLogisticsRouteImport.update({
   id: '/logistics',
   path: '/logistics',
@@ -38,6 +45,11 @@ const AppLogisticsRoute = AppLogisticsRouteImport.update({
 const AppLibraryRoute = AppLibraryRouteImport.update({
   id: '/library',
   path: '/library',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppIntelRoute = AppIntelRouteImport.update({
+  id: '/intel',
+  path: '/intel',
   getParentRoute: () => AppRoute,
 } as any)
 const AppBuilderRoute = AppBuilderRouteImport.update({
@@ -49,14 +61,18 @@ const AppBuilderRoute = AppBuilderRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
   '/builder': typeof AppBuilderRoute
+  '/intel': typeof AppIntelRoute
   '/library': typeof AppLibraryRoute
   '/logistics': typeof AppLogisticsRoute
+  '/operator': typeof AppOperatorRoute
   '/workout': typeof AppWorkoutRoute
 }
 export interface FileRoutesByTo {
   '/builder': typeof AppBuilderRoute
+  '/intel': typeof AppIntelRoute
   '/library': typeof AppLibraryRoute
   '/logistics': typeof AppLogisticsRoute
+  '/operator': typeof AppOperatorRoute
   '/workout': typeof AppWorkoutRoute
   '/': typeof AppIndexRoute
 }
@@ -64,22 +80,40 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_app': typeof AppRouteWithChildren
   '/_app/builder': typeof AppBuilderRoute
+  '/_app/intel': typeof AppIntelRoute
   '/_app/library': typeof AppLibraryRoute
   '/_app/logistics': typeof AppLogisticsRoute
+  '/_app/operator': typeof AppOperatorRoute
   '/_app/workout': typeof AppWorkoutRoute
   '/_app/': typeof AppIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/builder' | '/library' | '/logistics' | '/workout'
+  fullPaths:
+    | '/'
+    | '/builder'
+    | '/intel'
+    | '/library'
+    | '/logistics'
+    | '/operator'
+    | '/workout'
   fileRoutesByTo: FileRoutesByTo
-  to: '/builder' | '/library' | '/logistics' | '/workout' | '/'
+  to:
+    | '/builder'
+    | '/intel'
+    | '/library'
+    | '/logistics'
+    | '/operator'
+    | '/workout'
+    | '/'
   id:
     | '__root__'
     | '/_app'
     | '/_app/builder'
+    | '/_app/intel'
     | '/_app/library'
     | '/_app/logistics'
+    | '/_app/operator'
     | '/_app/workout'
     | '/_app/'
   fileRoutesById: FileRoutesById
@@ -111,6 +145,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppWorkoutRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/operator': {
+      id: '/_app/operator'
+      path: '/operator'
+      fullPath: '/operator'
+      preLoaderRoute: typeof AppOperatorRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/logistics': {
       id: '/_app/logistics'
       path: '/logistics'
@@ -125,6 +166,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppLibraryRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/intel': {
+      id: '/_app/intel'
+      path: '/intel'
+      fullPath: '/intel'
+      preLoaderRoute: typeof AppIntelRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/builder': {
       id: '/_app/builder'
       path: '/builder'
@@ -137,16 +185,20 @@ declare module '@tanstack/react-router' {
 
 interface AppRouteChildren {
   AppBuilderRoute: typeof AppBuilderRoute
+  AppIntelRoute: typeof AppIntelRoute
   AppLibraryRoute: typeof AppLibraryRoute
   AppLogisticsRoute: typeof AppLogisticsRoute
+  AppOperatorRoute: typeof AppOperatorRoute
   AppWorkoutRoute: typeof AppWorkoutRoute
   AppIndexRoute: typeof AppIndexRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
   AppBuilderRoute: AppBuilderRoute,
+  AppIntelRoute: AppIntelRoute,
   AppLibraryRoute: AppLibraryRoute,
   AppLogisticsRoute: AppLogisticsRoute,
+  AppOperatorRoute: AppOperatorRoute,
   AppWorkoutRoute: AppWorkoutRoute,
   AppIndexRoute: AppIndexRoute,
 }
