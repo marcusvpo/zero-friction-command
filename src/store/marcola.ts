@@ -158,7 +158,7 @@ const legsExercises = (): Exercise[] => [
   { id: "lg-1", name: "Cadeira Extensora", primary: "quads", restSeconds: 75, tempo: "2-1-2-1", libraryId: "lib-cadeira-extensora", sets: mkSets3(10, 0) },
   { id: "lg-2", name: "Mesa Flexora", primary: "hamstrings", secondary: ["glutes"], restSeconds: 75, tempo: "2-1-2-1", libraryId: "lib-mesa-flexora", sets: mkSets3(10, 0) },
   { id: "lg-3", name: "Seated Leg Press", primary: "quads", secondary: ["glutes","hamstrings"], restSeconds: 120, tempo: "2-1-2-0", libraryId: "lib-leg-press-45", sets: mkSets3(10, 0) },
-  { id: "lg-4", name: "Hack Squat (Agachamento Smith)", primary: "quads", secondary: ["glutes","hamstrings"], restSeconds: 120, tempo: "3-1-1-0", libraryId: "lib-hack-squat", sets: mkSets3(10, 0), notes: "Anotado como hack squat — confirmar com operador se for ombros" },
+  { id: "lg-4", name: "Desenvolvimento Máquina (Ombro)", primary: "shoulders", secondary: ["triceps"], restSeconds: 90, tempo: "2-1-1-0", libraryId: "lib-desenvolvimento-maquina", sets: mkSets3(10, 0), notes: "Intercalado no leg day" },
   { id: "lg-5", name: "Elevação Lateral", primary: "shoulders", restSeconds: 60, tempo: "2-0-2-1", libraryId: "lib-elevacao-lateral", sets: mkSets3(10, 0) },
   { id: "lg-6", name: "Remada Alta Polia Baixa", primary: "shoulders", secondary: ["traps","biceps"], restSeconds: 75, tempo: "2-1-1-0", libraryId: "lib-remada-alta-polia", sets: mkSets3(10, 0) },
 ];
