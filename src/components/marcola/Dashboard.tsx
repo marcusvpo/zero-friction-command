@@ -1,5 +1,6 @@
 import { Panel } from "./Panel";
-import { TonnageChart, VolumeChart } from "./Charts";
+import { DeltaChart6w, VolumeChart } from "./Charts";
+import { CoachIntel } from "./CoachIntel";
 import { SupplementTimeline } from "./SupplementTimeline";
 import { AnatomyHeatmap } from "./AnatomyHeatmap";
 import { QuickLogDrawer } from "./QuickLogDrawer";
@@ -158,9 +159,11 @@ export function Dashboard() {
       </motion.section>
 
       {/* ─────────── Secondary widgets ─────────── */}
-      <Panel title="Tonelagem · 7d" code="M4.2" status="ACTIVE">
-        <TonnageChart />
+      <Panel title="Tonelagem · Δ 6 semanas" code="M4.2" status="ACTIVE">
+        <DeltaChart6w />
       </Panel>
+
+      <CoachIntel />
 
       <Panel title="Mapa Anatômico Holográfico" code="M4.1" status="ACTIVE">
         <AnatomyHeatmap data={weeklyVolume} />
