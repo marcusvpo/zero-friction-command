@@ -9,105 +9,120 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as WorkoutRouteImport } from './routes/workout'
-import { Route as LogisticsRouteImport } from './routes/logistics'
-import { Route as BuilderRouteImport } from './routes/builder'
-import { Route as IndexRouteImport } from './routes/index'
+import { Route as AppIndexRouteImport } from './routes/_app.index'
+import { Route as AppWorkoutRouteImport } from './routes/_app.workout'
+import { Route as AppLogisticsRouteImport } from './routes/_app.logistics'
+import { Route as AppBuilderRouteImport } from './routes/_app.builder'
 
-const WorkoutRoute = WorkoutRouteImport.update({
-  id: '/workout',
+const AppIndexRoute = AppIndexRouteImport.update({
+  id: '/_app/',
+  path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppWorkoutRoute = AppWorkoutRouteImport.update({
+  id: '/_app/workout',
   path: '/workout',
   getParentRoute: () => rootRouteImport,
 } as any)
-const LogisticsRoute = LogisticsRouteImport.update({
-  id: '/logistics',
+const AppLogisticsRoute = AppLogisticsRouteImport.update({
+  id: '/_app/logistics',
   path: '/logistics',
   getParentRoute: () => rootRouteImport,
 } as any)
-const BuilderRoute = BuilderRouteImport.update({
-  id: '/builder',
+const AppBuilderRoute = AppBuilderRouteImport.update({
+  id: '/_app/builder',
   path: '/builder',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof IndexRoute
-  '/builder': typeof BuilderRoute
-  '/logistics': typeof LogisticsRoute
-  '/workout': typeof WorkoutRoute
+  '/builder': typeof AppBuilderRoute
+  '/logistics': typeof AppLogisticsRoute
+  '/workout': typeof AppWorkoutRoute
+  '/': typeof AppIndexRoute
 }
 export interface FileRoutesByTo {
-  '/': typeof IndexRoute
-  '/builder': typeof BuilderRoute
-  '/logistics': typeof LogisticsRoute
-  '/workout': typeof WorkoutRoute
+  '/builder': typeof AppBuilderRoute
+  '/logistics': typeof AppLogisticsRoute
+  '/workout': typeof AppWorkoutRoute
+  '/': typeof AppIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
-  '/': typeof IndexRoute
-  '/builder': typeof BuilderRoute
-  '/logistics': typeof LogisticsRoute
-  '/workout': typeof WorkoutRoute
+  '/_app/builder': typeof AppBuilderRoute
+  '/_app/logistics': typeof AppLogisticsRoute
+  '/_app/workout': typeof AppWorkoutRoute
+  '/_app/': typeof AppIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/builder' | '/logistics' | '/workout'
+  fullPaths: '/builder' | '/logistics' | '/workout' | '/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/builder' | '/logistics' | '/workout'
-  id: '__root__' | '/' | '/builder' | '/logistics' | '/workout'
+  to: '/builder' | '/logistics' | '/workout' | '/'
+  id:
+    | '__root__'
+    | '/_app/builder'
+    | '/_app/logistics'
+    | '/_app/workout'
+    | '/_app/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  IndexRoute: typeof IndexRoute
-  BuilderRoute: typeof BuilderRoute
-  LogisticsRoute: typeof LogisticsRoute
-  WorkoutRoute: typeof WorkoutRoute
+  AppBuilderRoute: typeof AppBuilderRoute
+  AppLogisticsRoute: typeof AppLogisticsRoute
+  AppWorkoutRoute: typeof AppWorkoutRoute
+  AppIndexRoute: typeof AppIndexRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/workout': {
-      id: '/workout'
-      path: '/workout'
-      fullPath: '/workout'
-      preLoaderRoute: typeof WorkoutRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/logistics': {
-      id: '/logistics'
-      path: '/logistics'
-      fullPath: '/logistics'
-      preLoaderRoute: typeof LogisticsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/builder': {
-      id: '/builder'
-      path: '/builder'
-      fullPath: '/builder'
-      preLoaderRoute: typeof BuilderRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/': {
-      id: '/'
+    '/_app/': {
+      id: '/_app/'
       path: '/'
       fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+      preLoaderRoute: typeof AppIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_app/workout': {
+      id: '/_app/workout'
+      path: '/workout'
+      fullPath: '/workout'
+      preLoaderRoute: typeof AppWorkoutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_app/logistics': {
+      id: '/_app/logistics'
+      path: '/logistics'
+      fullPath: '/logistics'
+      preLoaderRoute: typeof AppLogisticsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_app/builder': {
+      id: '/_app/builder'
+      path: '/builder'
+      fullPath: '/builder'
+      preLoaderRoute: typeof AppBuilderRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
-  IndexRoute: IndexRoute,
-  BuilderRoute: BuilderRoute,
-  LogisticsRoute: LogisticsRoute,
-  WorkoutRoute: WorkoutRoute,
+  AppBuilderRoute: AppBuilderRoute,
+  AppLogisticsRoute: AppLogisticsRoute,
+  AppWorkoutRoute: AppWorkoutRoute,
+  AppIndexRoute: AppIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
