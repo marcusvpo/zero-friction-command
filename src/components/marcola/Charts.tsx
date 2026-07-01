@@ -10,8 +10,8 @@ import {
   Tooltip,
   ComposedChart,
 } from "recharts";
+import { useMemo } from "react";
 import { useMarcolaStore } from "@/store/marcola";
-import { useShallow } from "zustand/react/shallow";
 
 const volumeData = [
   { m: "PEITO", v: 18 },
