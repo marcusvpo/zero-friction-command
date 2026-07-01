@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { motion } from "framer-motion";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   AlertTriangle, User, Ruler, Scale, Hexagon, Trophy, Pencil, Check, X, Trash2,
 } from "lucide-react";
@@ -30,12 +30,14 @@ const MUSCLE_LABEL: Record<MuscleId, string> = {
 
 function OperatorProfile() {
   const biometrics = useMarcolaStore((s) => s.biometrics);
+  const routine = useMarcolaStore((s) => s.routine);
   const setBio = useMarcolaStore((s) => s.setBiometrics);
-  const needsCalib = useMarcolaStore((s) => s.needsWeightCalibration());
-  const daysSince = useMarcolaStore((s) => s.daysSinceWeightUpdate());
-  const medals = useMarcolaStore((s) => s.getPRMedals());
   const wipeData = useMarcolaStore((s) => s.wipeData);
   const [wiping, setWiping] = useState(false);
+
+  const daysSince = useMemo(() => daysSinceWeightUpdate(biometrics.weightUpdatedAt), [biometrics.weightUpdatedAt]);
+  const needsCalib = daysSince === null ? true : daysSince >= 7;
+  const medals = useMemo(() => getPRMedalsFromRoutine(routine), [routine]);
 
   const handleWipe = async () => {
     setWiping(true);
@@ -256,6 +258,39 @@ function OperatorProfile() {
       </section>
     </main>
   );
+}
+
+function daysSinceWeightUpdate(weightUpdatedAt: string | null) {
+  if (!weightUpdatedAt) return null;
+  const updatedAt = new Date(weightUpdatedAt).getTime();
+  if (Number.isNaN(updatedAt)) return null;
+  return Math.floor((Date.now() - updatedAt) / 86_400_000);
+}
+
+function getPRMedalsFromRoutine(routine: ReturnType<typeof useMarcolaStore.getState>["routine"]) {
+  const best = new Map<string, PRMedal>();
+  for (const day of routine.days) {
+    for (const ex of day.exercises) {
+      let top: { weight: number; reps: number } = { weight: 0, reps: 0 };
+      for (const st of ex.sets) {
+        if (st.isWarmup) continue;
+        if (st.weight > top.weight) top = { weight: st.weight, reps: st.reps };
+      }
+      if (top.weight <= 0) continue;
+      const key = ex.libraryId ?? ex.id;
+      const prev = best.get(key);
+      if (!prev || top.weight > prev.weight) {
+        best.set(key, {
+          exerciseId: ex.id,
+          exerciseName: ex.name,
+          primary: ex.primary,
+          weight: top.weight,
+          reps: top.reps,
+        });
+      }
+    }
+  }
+  return Array.from(best.values()).sort((a, b) => b.weight - a.weight);
 }
 
 function BioField({
