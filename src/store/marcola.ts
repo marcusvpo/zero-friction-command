@@ -275,6 +275,7 @@ interface State {
   isPaused: () => boolean;
   hasActiveSession: () => boolean;
   getSessionTelemetry: () => SessionTelemetry;
+  syncActiveDayToToday: () => void;
 
   /* lifecycle */
   wipeData: () => Promise<void>;

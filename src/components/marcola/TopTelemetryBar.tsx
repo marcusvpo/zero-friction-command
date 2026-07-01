@@ -23,7 +23,7 @@ export function TopTelemetryBar() {
 
 
   return (
-    <header className="sticky top-0 z-30 px-4 pt-6 pb-4">
+    <header className="sticky top-0 z-30 border-b border-white/5 bg-background/70 px-4 pt-6 pb-4 backdrop-blur-xl">
       <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
         <div className="flex min-w-0 flex-col gap-1">
           <div className="flex items-center gap-2">
