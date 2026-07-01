@@ -1,10 +1,10 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { motion, AnimatePresence, type PanInfo } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { memo, useEffect, useMemo, useState } from "react";
 import {
-  Check, ChevronLeft, ChevronRight, Minus, Plus, Square, Timer, SkipForward, Target,
-  Pause, Play, Library as LibraryIcon, Flame, Trash2, Settings2, MoreVertical, Save,
-  TrendingUp, Sparkles, Hand,
+  Check, ChevronLeft, ChevronRight, Minus, Plus, Timer, SkipForward,
+  Pause, Play, Library as LibraryIcon, Flame, Trash2, Settings2, MoreVertical,
+  TrendingUp, Sparkles, Square, ListChecks, X,
 } from "lucide-react";
 import { useMarcolaStore, type ExerciseSet, type OverloadSuggestion } from "@/store/marcola";
 import { SessionSummaryModal } from "@/components/marcola/SessionSummaryModal";
@@ -14,8 +14,8 @@ import { toast } from "sonner";
 export const Route = createFileRoute("/_app/workout")({
   head: () => ({
     meta: [
-      { title: "Workout Console · Marcola Prime" },
-      { name: "description", content: "Console GPS de execução tática de treino." },
+      { title: "Treino · Marcola Prime" },
+      { name: "description", content: "Console de execução do treino." },
     ],
   }),
   component: WorkoutConsole,
@@ -31,6 +31,7 @@ function WorkoutConsole() {
   const skipRest = useMarcolaStore((s) => s.skipRest);
   const startRest = useMarcolaStore((s) => s.startRest);
   const startWorkout = useMarcolaStore((s) => s.startWorkout);
+  const selectDay = useMarcolaStore((s) => s.selectDay);
   const selectExercise = useMarcolaStore((s) => s.selectExercise);
   const completeSet = useMarcolaStore((s) => s.completeCurrentSet);
   const adjust = useMarcolaStore((s) => s.adjustCurrentSet);
@@ -45,8 +46,6 @@ function WorkoutConsole() {
   const setSetRest = useMarcolaStore((s) => s.setSetRest);
   const getSuggestion = useMarcolaStore((s) => s.getSuggestion);
   const adjustRestForRPE = useMarcolaStore((s) => s.adjustRestForRPE);
-  const seenSwipeHint = useMarcolaStore((s) => s.seenSwipeHint);
-  const markSwipeHintSeen = useMarcolaStore((s) => s.markSwipeHintSeen);
   const syncActiveDayToToday = useMarcolaStore((s) => s.syncActiveDayToToday);
 
   useEffect(() => { syncActiveDayToToday(); }, [syncActiveDayToToday]);
@@ -57,15 +56,14 @@ function WorkoutConsole() {
 
   const isPaused = active.pausedAt !== null;
   const isResting = rest.active;
+  const hasSession = active.startedAt !== null && active.finishedAt === null;
 
-  // ───── Rest tick (parent only re-renders when rest.remaining changes) ─────
   useEffect(() => {
     if (!rest.active || isPaused) return;
     const id = window.setInterval(tickRest, 1000);
     return () => window.clearInterval(id);
   }, [rest.active, isPaused, tickRest]);
 
-  // ───── Smart Overload suggestion ─────
   const suggestion: OverloadSuggestion | null = useMemo(
     () => (exercise ? getSuggestion(exercise.id) : null),
     [exercise, getSuggestion, active.exerciseIndex],
@@ -80,375 +78,282 @@ function WorkoutConsole() {
   const ss = String(rest.remaining % 60).padStart(2, "0");
   const restPct = rest.total > 0 ? (rest.remaining / rest.total) * 100 : 0;
 
-  // Drawers
-  const [postSetDrawer, setPostSetDrawer] = useState<{ open: boolean }>({ open: false });
+  const [postSetRPE, setPostSetRPE] = useState(false);
   const [setConfigOpen, setSetConfigOpen] = useState(false);
   const [discardOpen, setDiscardOpen] = useState(false);
-  // Hint banner — só na primeira sessão.
-  const [hintVisible, setHintVisible] = useState(!seenSwipeHint);
-  useEffect(() => {
-    if (!hintVisible) return;
-    const t = window.setTimeout(() => {
-      setHintVisible(false);
-      markSwipeHintSeen();
-    }, 4000);
-    return () => window.clearTimeout(t);
-  }, [hintVisible, markSwipeHintSeen]);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [planOpen, setPlanOpen] = useState(false);
+  const [dayPickerOpen, setDayPickerOpen] = useState(false);
 
   const handleConfirm = async () => {
     if (!exercise || !currentSet) return;
     await completeSet();
-    setPostSetDrawer({ open: true });
-    window.setTimeout(() => setPostSetDrawer({ open: false }), 2400);
+    setPostSetRPE(true);
+    window.setTimeout(() => setPostSetRPE(false), 3500);
     if (typeof navigator !== "undefined" && "vibrate" in navigator) navigator.vibrate?.(20);
-    toast.success("Set registrado", { description: `Descanso ${currentSet.restSeconds ?? exercise.restSeconds}s iniciado` });
-  };
-
-  const handleSkip = () => {
-    if (!exercise) return;
-    if (typeof navigator !== "undefined" && "vibrate" in navigator) navigator.vibrate?.([15, 30, 15]);
-    next();
-    toast.message("Set pulado", { description: "Avançando para próximo exercício" });
-  };
-
-  const handleDragEnd = (_: unknown, info: PanInfo) => {
-    const THRESHOLD = 80;
-    if (info.offset.x > THRESHOLD) void handleConfirm();
-    else if (info.offset.x < -THRESHOLD) handleSkip();
   };
 
   const handleFinish = () => {
     finish();
+    setMenuOpen(false);
     toast.success("Sessão finalizada");
   };
 
+  const handleStart = () => {
+    startWorkout(day.id);
+    toast.success(`${day.name} iniciado`);
+  };
+
   return (
-    <main className="relative z-10 flex min-h-0 flex-1 flex-col px-3 pt-2 pb-3">
-      {/* ─────────── Top control rail ─────────── */}
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <SessionClock
-          startedAt={active.startedAt}
-          finishedAt={active.finishedAt}
-          pausedAt={active.pausedAt}
-          totalPausedMs={active.totalPausedMs}
-          isPaused={isPaused}
-        />
-        <div className="flex items-center gap-1">
-          {active.startedAt && !active.finishedAt && (
-            isPaused ? (
-              <CtrlBtn onClick={resume} aria-label="Retomar sessão" tone="matrix">
-                <Play className="h-3.5 w-3.5" /> RETOMAR
-              </CtrlBtn>
-            ) : (
-              <CtrlBtn onClick={pause} aria-label="Pausar sessão" tone="amber">
-                <Pause className="h-3.5 w-3.5" /> PAUSAR
-              </CtrlBtn>
-            )
-          )}
-          <CtrlBtn onClick={() => { toast.message("Rascunho salvo localmente"); }} aria-label="Salvar rascunho" tone="cyan">
-            <Save className="h-3.5 w-3.5" />
-          </CtrlBtn>
-          <CtrlBtn onClick={() => setDiscardOpen(true)} aria-label="Descartar sessão" tone="danger">
-            <Trash2 className="h-3.5 w-3.5" />
-          </CtrlBtn>
-          <CtrlBtn onClick={handleFinish} aria-label="Finalizar sessão" tone="cyan">
-            <Square className="h-3.5 w-3.5" /> END
-          </CtrlBtn>
-        </div>
-      </div>
-
-      {/* ─────────── Day selector strip ─────────── */}
-      <div className="mb-2 flex gap-1 overflow-x-auto scrollbar-none">
-        {routine.days.map((d) => {
-          const isActive = d.id === active.dayId;
-          return (
-            <motion.button
-              key={d.id} whileTap={{ scale: 0.95 }}
-              onClick={() => startWorkout(d.id)}
-              className={`glass min-h-[40px] shrink-0 rounded-lg px-2.5 py-1.5 text-left transition-all ${
-                isActive ? "ring-1 ring-cyan/60 shadow-glow-cyan" : ""
-              }`}
-            >
-              <div className="font-mono-tactical text-[8px] tracking-widest text-muted-foreground">{d.code}</div>
-              <div className={`text-[11px] font-medium leading-tight ${isActive ? "text-cyan" : "text-foreground"}`}>{d.name}</div>
-            </motion.button>
-          );
-        })}
-      </div>
-
-      {/* ─────────── Progress + library access ─────────── */}
-      <div className="mb-2 flex items-center justify-between">
-        <span className="font-mono-tactical text-[10px] tracking-widest text-muted-foreground">
-          EX {String(active.exerciseIndex + 1).padStart(2,"0")}/{String(day.exercises.length).padStart(2,"0")} · {day.code}
-        </span>
+    <main className="relative z-10 flex min-h-0 flex-1 flex-col px-4 pt-3 pb-4">
+      {/* ─────────── Top bar: day · clock · menu ─────────── */}
+      <div className="mb-4 flex items-center justify-between gap-3">
         <button
-          onClick={() => navigate({
-            to: "/library",
-            search: {
-              swap: exercise?.id ?? "",
-              day: day.id,
-              muscle: exercise?.primary ?? "",
-            } as never,
-          })}
-          className="font-mono-tactical flex items-center gap-1 text-[10px] tracking-widest text-cyan hover:text-cyan/80"
+          onClick={() => setDayPickerOpen(true)}
+          disabled={hasSession}
+          className="flex items-center gap-1.5 rounded-md px-2 py-1 text-sm font-medium text-foreground hover:bg-white/5 disabled:opacity-60"
         >
-          <LibraryIcon className="h-3 w-3" /> SUGERIR ALTERNATIVA
+          <span>{day.name}</span>
+          <ChevronRight className="h-3.5 w-3.5 rotate-90 text-muted-foreground" />
+        </button>
+
+        {hasSession ? (
+          <SessionClock
+            startedAt={active.startedAt}
+            finishedAt={active.finishedAt}
+            pausedAt={active.pausedAt}
+            totalPausedMs={active.totalPausedMs}
+            isPaused={isPaused}
+          />
+        ) : (
+          <span className="text-xs text-muted-foreground">Pronto</span>
+        )}
+
+        <button
+          onClick={() => setMenuOpen(true)}
+          aria-label="Menu"
+          className="grid h-9 w-9 place-items-center rounded-md text-foreground hover:bg-white/5"
+        >
+          <MoreVertical className="h-4 w-4" />
         </button>
       </div>
 
       <AnimatePresence mode="wait">
-        {isResting ? (
-          /* ─────── REST MODE ─────── */
+        {!hasSession ? (
+          /* ─────── PRE-SESSION ─────── */
+          <motion.section
+            key="pre"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            className="flex min-h-0 flex-1 flex-col items-center justify-center text-center"
+          >
+            <div className="text-xs uppercase tracking-widest text-muted-foreground">{day.code}</div>
+            <h1 className="mt-2 text-3xl font-semibold text-foreground">{day.name}</h1>
+            <p className="mt-2 text-sm text-muted-foreground">
+              {day.exercises.length} exercícios · {day.exercises.reduce((n, e) => n + e.sets.length, 0)} sets
+            </p>
+
+            <button
+              onClick={handleStart}
+              className="mt-8 flex min-h-[56px] w-full max-w-xs items-center justify-center gap-2 rounded-xl bg-primary text-primary-foreground text-sm font-semibold tracking-wide"
+            >
+              <Play className="h-4 w-4" fill="currentColor" /> INICIAR TREINO
+            </button>
+
+            <button
+              onClick={() => setPlanOpen(true)}
+              className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+            >
+              <ListChecks className="h-3.5 w-3.5" /> Ver plano
+            </button>
+          </motion.section>
+        ) : isResting ? (
+          /* ─────── REST ─────── */
           <motion.section
             key="rest"
-            initial={{ opacity: 0, scale: 0.96 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.98 }}
-            transition={{ type: "spring", stiffness: 220, damping: 24 }}
-            className="glass-strong relative flex min-h-0 flex-1 flex-col items-center justify-center overflow-hidden rounded-2xl p-4 text-center"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="flex min-h-0 flex-1 flex-col items-center justify-center text-center"
           >
-            <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan/60 to-transparent" />
-            <div className="flex items-center gap-2 text-cyan">
-              <Timer className="h-4 w-4" />
-              <span className="font-mono-tactical text-[11px] uppercase tracking-[0.3em]">Descanso Tático</span>
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <Timer className="h-3.5 w-3.5" />
+              <span className="text-xs uppercase tracking-widest">Descanso</span>
             </div>
-            <motion.div
-              key={rest.remaining}
-              initial={{ scale: 0.98, opacity: 0.7 }}
-              animate={{ scale: 1, opacity: 1 }}
-              className="font-mono-tactical mt-3 font-bold leading-none tracking-tighter text-cyan glow-cyan"
-              style={{ textShadow: "0 0 28px rgba(0,240,255,0.6)", fontSize: "clamp(64px, 22vw, 110px)" }}
+            <div
+              className="font-mono mt-4 font-semibold leading-none tracking-tight text-foreground"
+              style={{ fontSize: "clamp(72px, 24vw, 128px)" }}
             >
               {mm}:{ss}
-            </motion.div>
-            <div className="font-mono-tactical mt-1 text-[10px] uppercase tracking-widest text-muted-foreground">
-              Próximo: {nextLabel(day, active)}
             </div>
-
-            <div className="mt-4 h-1.5 w-full max-w-sm overflow-hidden rounded-full bg-white/5">
+            <div className="mt-3 h-1 w-full max-w-xs overflow-hidden rounded-full bg-white/5">
               <motion.div
                 animate={{ width: `${restPct}%` }}
-                transition={{ duration: 0.6, ease: "easeOut" }}
-                className="h-full bg-gradient-to-r from-cyan to-matrix"
-                style={{ boxShadow: "0 0 12px rgba(0,240,255,0.8)" }}
+                transition={{ duration: 0.5, ease: "linear" }}
+                className="h-full bg-primary"
               />
             </div>
+            <p className="mt-3 text-xs text-muted-foreground">Próximo: {nextLabel(day, active)}</p>
 
-            <div className="mt-4 flex w-full max-w-sm gap-2">
-              <motion.button whileTap={{ scale: 0.96 }} onClick={() => startRest(rest.total + 15)}
-                className="glass flex min-h-[48px] flex-1 items-center justify-center gap-2 rounded-xl text-cyan ring-1 ring-cyan/30">
-                <Plus className="h-4 w-4" />
-                <span className="font-mono-tactical text-xs tracking-widest">+15s</span>
-              </motion.button>
-              <motion.button whileTap={{ scale: 0.96 }} onClick={() => { skipRest(); toast.message("Descanso pulado"); }}
-                className="flex min-h-[48px] flex-1 items-center justify-center gap-2 rounded-xl bg-cyan text-background"
-                style={{ boxShadow: "0 0 22px rgba(0,240,255,0.55)" }}>
-                <SkipForward className="h-4 w-4" />
-                <span className="font-mono-tactical text-xs font-semibold tracking-widest">PULAR</span>
-              </motion.button>
+            <div className="mt-8 flex w-full max-w-xs gap-2">
+              <button
+                onClick={() => startRest(rest.total + 15)}
+                className="flex min-h-[48px] flex-1 items-center justify-center gap-1.5 rounded-xl border border-border text-sm text-foreground hover:bg-white/5"
+              >
+                <Plus className="h-4 w-4" /> 15s
+              </button>
+              <button
+                onClick={() => { skipRest(); toast.message("Descanso pulado"); }}
+                className="flex min-h-[48px] flex-1 items-center justify-center gap-1.5 rounded-xl bg-primary text-sm font-semibold text-primary-foreground"
+              >
+                <SkipForward className="h-4 w-4" /> PULAR
+              </button>
             </div>
           </motion.section>
         ) : exercise && currentSet ? (
-          /* ─────── GPS EXECUTION ─────── */
+          /* ─────── EXECUTION ─────── */
           <motion.section
             key={`ex-${exercise.id}-${active.setIndex}`}
-            drag="x"
-            dragDirectionLock
-            dragConstraints={{ left: 0, right: 0 }}
-            dragElastic={0.25}
-            onDragEnd={handleDragEnd}
-            initial={{ opacity: 0, y: 12 }}
+            initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -12 }}
-            transition={{ type: "spring", stiffness: 220, damping: 24 }}
-            className="glass-strong relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl p-3 touch-pan-y"
+            exit={{ opacity: 0, y: -8 }}
+            className="flex min-h-0 flex-1 flex-col"
           >
-            {/* Swipe hint */}
-            <AnimatePresence>
-              {hintVisible && (
-                <motion.div
-                  initial={{ opacity: 0, y: -8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -8 }}
-                  className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-center justify-center gap-2 rounded-t-2xl bg-cyan/10 py-1.5 text-cyan ring-1 ring-cyan/30"
-                >
-                  <Hand className="h-3 w-3" />
-                  <span className="font-mono-tactical text-[9px] tracking-[0.25em]">
-                    ← PULAR · CONFIRMAR →
-                  </span>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            {/* Header */}
-            <header className="flex items-center justify-between gap-2">
-              <NavBtn onClick={prev} aria-label="Exercício anterior"><ChevronLeft className="h-5 w-5" /></NavBtn>
-              <div className="min-w-0 flex-1 text-center">
-                <div className="font-mono-tactical text-[9px] tracking-widest text-muted-foreground">
-                  ALVO · {exercise.primary.toUpperCase()}{exercise.tempo ? ` · TEMPO ${exercise.tempo}` : ""}
-                </div>
-                <h2 className="truncate text-base font-semibold leading-tight text-foreground sm:text-lg">{exercise.name}</h2>
+            {/* Exercise header */}
+            <div className="text-center">
+              <div className="text-xs uppercase tracking-widest text-muted-foreground">
+                {exercise.primary}{currentSet.isWarmup ? " · Warm-up" : ""}
               </div>
-              <NavBtn onClick={next} aria-label="Próximo exercício"><ChevronRight className="h-5 w-5" /></NavBtn>
-            </header>
+              <h2 className="mt-1 text-2xl font-semibold text-foreground">{exercise.name}</h2>
+              <div className="mt-1 text-xs text-muted-foreground">
+                Set {active.setIndex + 1} de {exercise.sets.length}
+              </div>
 
-            {/* Smart Overload banner */}
+              {/* Set dots */}
+              <div className="mt-3 flex items-center justify-center gap-1.5">
+                {exercise.sets.map((s, i) => {
+                  const isCur = i === active.setIndex;
+                  return (
+                    <span
+                      key={i}
+                      className={`h-1.5 rounded-full transition-all ${
+                        s.completed ? "w-4 bg-foreground/80" :
+                        isCur ? "w-6 bg-primary" :
+                        "w-1.5 bg-white/15"
+                      }`}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Overload suggestion (subtle chip) */}
             {suggestion && (
               <button
                 onClick={() => {
-                  // Pull current values toward suggestion
                   const wDelta = Math.round((suggestion.weight - currentSet.weight) / 2.5);
                   const rDelta = suggestion.reps - currentSet.reps;
                   for (let i = 0; i < Math.abs(wDelta); i++) adjust("weight", wDelta > 0 ? 1 : -1);
                   for (let i = 0; i < Math.abs(rDelta); i++) adjust("reps", rDelta > 0 ? 1 : -1);
                 }}
-                className={`mt-2 flex w-full items-center justify-between gap-2 rounded-lg px-3 py-1.5 ring-1 transition-colors ${
+                className={`mx-auto mt-4 flex items-center gap-1.5 rounded-full px-3 py-1 text-xs transition-colors ${
                   isSmartMatch
-                    ? "bg-matrix/15 ring-matrix/60"
-                    : "bg-cyan/5 ring-cyan/25 hover:bg-cyan/10"
+                    ? "bg-primary/15 text-primary"
+                    : "text-muted-foreground hover:text-foreground"
                 }`}
               >
-                <span className="flex items-center gap-1.5">
-                  <Sparkles className={`h-3 w-3 ${isSmartMatch ? "text-matrix" : "text-cyan"}`} />
-                  <span className={`font-mono-tactical text-[10px] tracking-widest ${isSmartMatch ? "text-matrix" : "text-cyan"}`}>
-                    META · {suggestion.weight}kg × {suggestion.reps}
-                  </span>
-                </span>
-                <span className="font-mono-tactical flex items-center gap-1 text-[9px] tracking-widest text-muted-foreground">
-                  {suggestion.deltaKg > 0 && <TrendingUp className="h-3 w-3 text-matrix" />}
-                  {suggestion.label}
-                </span>
+                {suggestion.deltaKg > 0 ? <TrendingUp className="h-3 w-3" /> : <Sparkles className="h-3 w-3" />}
+                Meta: {suggestion.weight}kg × {suggestion.reps}
               </button>
             )}
 
-            {/* Set indicator */}
-            <div className="mt-2 flex items-center justify-center gap-1">
-              {exercise.sets.map((s, i) => {
-                const isCur = i === active.setIndex;
-                return (
-                  <span key={i}
-                    className={`h-1.5 rounded-full transition-all ${
-                      s.completed ? (s.isWarmup ? "bg-amber/70 w-4" : "bg-emerald-400 w-5") :
-                      isCur ? "bg-cyan w-8 shadow-glow-cyan" :
-                      s.isWarmup ? "bg-amber/30 w-3" : "bg-white/15 w-3"
-                    }`}
-                  />
-                );
-              })}
+            {/* Steppers */}
+            <div className="mt-6 flex flex-col gap-3">
+              <MinimalStepper label="Peso" unit="kg" value={currentSet.weight}
+                onMinus={() => adjust("weight", -1)} onPlus={() => adjust("weight", +1)} />
+              <MinimalStepper label="Reps" unit="" value={currentSet.reps}
+                onMinus={() => adjust("reps", -1)} onPlus={() => adjust("reps", +1)} />
             </div>
-            <div className="mt-0.5 flex items-center justify-center gap-2 text-center font-mono-tactical text-[10px] tracking-[0.25em]">
-              <span className="text-cyan">SET {active.setIndex + 1}/{exercise.sets.length}</span>
-              {currentSet.isWarmup && <span className="text-amber">· WARM-UP</span>}
-              <button onClick={() => setSetConfigOpen(true)} className="ml-1 text-muted-foreground hover:text-foreground" aria-label="Configurar set">
+
+            {/* Target line */}
+            <div className="mt-4 text-center text-xs text-muted-foreground">
+              Alvo {currentSet.reps} × {currentSet.weight}kg · descanso {currentSet.restSeconds ?? exercise.restSeconds}s
+              {exercise.targetRPE ? ` · RPE ${exercise.targetRPE}` : ""}
+              <button onClick={() => setSetConfigOpen(true)} className="ml-2 inline-flex items-center hover:text-foreground" aria-label="Configurar set">
                 <Settings2 className="h-3 w-3" />
               </button>
             </div>
 
-            {/* Steppers (memo'd) */}
-            <div className="mt-2 grid grid-cols-2 gap-2">
-              <MemoStepper label="PESO" unit="kg" value={currentSet.weight} onMinus={() => adjust("weight", -1)} onPlus={() => adjust("weight", +1)} tone="cyan" />
-              <MemoStepper label="REPS" unit="reps" value={currentSet.reps} onMinus={() => adjust("reps", -1)} onPlus={() => adjust("reps", +1)} tone="matrix" />
-            </div>
+            <div className="flex-1" />
 
-            {/* Target */}
-            <div className="mt-2 flex items-center justify-center gap-2 rounded-lg bg-white/[0.03] py-1.5">
-              <Target className="h-3 w-3 text-amber" />
-              <span className="font-mono-tactical text-[9px] tracking-widest text-muted-foreground">
-                ALVO · {currentSet.reps}× {currentSet.weight}kg · DESC {currentSet.restSeconds ?? exercise.restSeconds}s
-                {exercise.targetRPE ? ` · RPE ${exercise.targetRPE}` : ""}
-              </span>
-            </div>
-
-            {/* Plan list (compact, scroll) */}
-            <div className="mt-2 min-h-0 flex-1 overflow-y-auto rounded-lg bg-white/[0.02] p-1">
-              {day.exercises.map((ex, i) => {
-                const done = ex.sets.every((s) => s.completed);
-                const isCur = i === active.exerciseIndex;
-                const doneCount = ex.sets.filter((s) => s.completed).length;
-                return (
-                  <button
-                    key={ex.id}
-                    onClick={() => selectExercise(i)}
-                    className={`flex min-h-[32px] w-full items-center justify-between rounded-md px-2 py-0.5 text-left ${
-                      isCur ? "bg-cyan/10 text-cyan" : "text-foreground/80 hover:bg-white/5"
-                    }`}
-                  >
-                    <span className="flex min-w-0 items-center gap-2">
-                      <span className="font-mono-tactical w-5 text-[10px] tracking-widest text-muted-foreground">
-                        {String(i+1).padStart(2,"0")}
-                      </span>
-                      <span className="truncate text-[11px]">{ex.name}</span>
-                    </span>
-                    <span className="font-mono-tactical shrink-0 text-[10px] tracking-widest text-muted-foreground">
-                      {doneCount}/{ex.sets.length}{done && <span className="ml-1 text-emerald-400">✓</span>}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* CONFIRM SET — verde sólido em match, gradiente caso contrário */}
-            <motion.button
-              whileTap={{ scale: 0.98 }}
+            {/* CTA */}
+            <button
               disabled={isPaused}
               onClick={handleConfirm}
-              className={`relative mt-2 flex min-h-[60px] w-full items-center justify-center gap-3 overflow-hidden rounded-xl text-background disabled:opacity-50 ${
-                isSmartMatch
-                  ? "bg-matrix"
-                  : "bg-gradient-to-r from-matrix via-cyan to-matrix"
-              }`}
-              style={{
-                boxShadow: isSmartMatch
-                  ? "0 0 44px rgba(57,255,20,0.85), inset 0 0 18px rgba(57,255,20,0.4)"
-                  : "0 0 32px rgba(57,255,20,0.5)",
-              }}
+              className="mt-4 flex min-h-[56px] w-full items-center justify-center gap-2 rounded-xl bg-primary text-primary-foreground text-sm font-semibold tracking-wide disabled:opacity-50"
             >
-              <span className="absolute inset-0 bg-[linear-gradient(120deg,transparent,rgba(255,255,255,0.35),transparent)] bg-[length:200%_100%] animate-[shimmer_3s_linear_infinite]" />
-              <Check className="relative h-5 w-5" strokeWidth={3} />
-              <span className="font-mono-tactical relative text-sm font-bold uppercase tracking-[0.25em]">
-                {isPaused ? "Pausado" : isSmartMatch ? "PR · CONFIRMAR" : "Confirm Set"}
-              </span>
-            </motion.button>
+              <Check className="h-4 w-4" strokeWidth={3} />
+              {isPaused ? "PAUSADO" : "CONFIRMAR SET"}
+            </button>
+
+            {/* Nav */}
+            <div className="mt-3 flex items-center justify-between">
+              <button
+                onClick={prev}
+                className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+              >
+                <ChevronLeft className="h-3.5 w-3.5" /> Anterior
+              </button>
+              <button
+                onClick={() => setPlanOpen(true)}
+                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+              >
+                <ListChecks className="h-3.5 w-3.5" /> Plano
+              </button>
+              <button
+                onClick={next}
+                className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+              >
+                Próximo <ChevronRight className="h-3.5 w-3.5" />
+              </button>
+            </div>
           </motion.section>
         ) : (
-          <motion.div key="done" className="glass flex flex-1 items-center justify-center rounded-2xl">
+          <motion.div key="done" className="flex flex-1 items-center justify-center">
             <div className="text-center">
-              <Check className="mx-auto h-10 w-10 text-emerald-400" />
-              <p className="mt-2 font-mono-tactical text-sm tracking-widest text-foreground">SESSÃO CONCLUÍDA</p>
+              <Check className="mx-auto h-10 w-10 text-foreground/70" />
+              <p className="mt-2 text-sm text-muted-foreground">Sessão concluída</p>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* ─────── Post-set ghost drawer (RPE / notes) ─────── */}
+      {/* ─────── Post-set RPE prompt ─────── */}
       <AnimatePresence>
-        {postSetDrawer.open && exercise && (
+        {postSetRPE && exercise && (
           <motion.div
             initial={{ y: 60, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 60, opacity: 0 }}
-            className="fixed inset-x-3 bottom-24 z-40 mx-auto max-w-[420px] glass-strong rounded-xl border border-cyan/20 p-3"
+            className="fixed inset-x-4 bottom-24 z-40 mx-auto max-w-[420px] rounded-xl border border-border bg-background/95 p-3 backdrop-blur"
           >
             <div className="flex items-center justify-between">
-              <span className="font-mono-tactical text-[10px] tracking-widest text-cyan">
-                <Flame className="mr-1 inline h-3 w-3" /> RPE REAL · {exercise.name}
+              <span className="flex items-center gap-1.5 text-xs text-foreground">
+                <Flame className="h-3.5 w-3.5" /> RPE
               </span>
-              <button onClick={() => setPostSetDrawer({ open: false })} className="text-[10px] text-muted-foreground">FECHAR</button>
+              <button onClick={() => setPostSetRPE(false)} className="text-xs text-muted-foreground">Pular</button>
             </div>
-            <div className="mt-2 flex gap-1">
+            <div className="mt-2 flex gap-1.5">
               {[6,7,8,9,10].map((rpe) => (
                 <button
                   key={rpe}
                   onClick={() => {
                     adjustRestForRPE(rpe);
-                    setPostSetDrawer({ open: false });
-                    const msg = rpe <= 7 ? "Rest reduzido em 15s (RPE baixo)" :
-                                rpe === 9 ? "Rest +30s (RPE alto)" :
-                                rpe >= 10 ? "Rest +60s (RPE máximo)" :
-                                "RPE alvo atingido";
-                    toast.message(`RPE ${rpe}`, { description: msg });
+                    setPostSetRPE(false);
+                    toast.message(`RPE ${rpe}`);
                   }}
-                  className="glass h-10 flex-1 rounded-md font-mono-tactical text-xs text-foreground hover:bg-cyan/10 hover:text-cyan"
+                  className="h-10 flex-1 rounded-md border border-border text-sm text-foreground hover:bg-white/5"
                 >
                   {rpe}
                 </button>
@@ -458,91 +363,138 @@ function WorkoutConsole() {
         )}
       </AnimatePresence>
 
-      {/* ─────── Set Config Drawer ─────── */}
-      <AnimatePresence>
-        {setConfigOpen && exercise && currentSet && (
-          <motion.div
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm grid items-end sm:items-center justify-center p-4"
-            onClick={() => setSetConfigOpen(false)}
-          >
-            <motion.div
-              initial={{ y: 80 }} animate={{ y: 0 }} exit={{ y: 80 }}
-              onClick={(e) => e.stopPropagation()}
-              className="glass-strong w-full max-w-md rounded-2xl border border-cyan/20 p-4"
-            >
-              <div className="flex items-center gap-2 text-cyan">
-                <MoreVertical className="h-4 w-4" />
-                <span className="font-mono-tactical text-[11px] tracking-widest">SET {active.setIndex + 1} · CONFIG</span>
-              </div>
-              <h3 className="mt-1 text-lg font-semibold text-foreground">{exercise.name}</h3>
-
-              <label className="mt-4 flex items-center justify-between rounded-lg bg-white/[0.03] p-3">
-                <span className="text-sm text-foreground">Warm-up <span className="text-muted-foreground text-[11px]">(não conta volume)</span></span>
-                <input
-                  type="checkbox"
-                  checked={!!currentSet.isWarmup}
-                  onChange={() => toggleWarmup(exercise.id, active.setIndex)}
-                  className="h-5 w-5 accent-amber"
-                />
-              </label>
-
-              <div className="mt-3">
-                <div className="font-mono-tactical text-[10px] tracking-widest text-muted-foreground">DESCANSO DESTE SET (s)</div>
-                <div className="mt-2 flex gap-1.5">
-                  {[30, 45, 60, 90, 120, 180].map((s) => {
-                    const isCur = (currentSet.restSeconds ?? exercise.restSeconds) === s;
-                    return (
-                      <button
-                        key={s}
-                        onClick={() => setSetRest(exercise.id, active.setIndex, s)}
-                        className={`glass min-h-[40px] flex-1 rounded-md font-mono-tactical text-xs ${isCur ? "text-cyan ring-1 ring-cyan/60" : "text-foreground"}`}
-                      >
-                        {s}s
-                      </button>
-                    );
-                  })}
-                </div>
-                <button
-                  onClick={() => setSetRest(exercise.id, active.setIndex, undefined)}
-                  className="mt-2 font-mono-tactical text-[10px] tracking-widest text-muted-foreground hover:text-foreground"
-                >
-                  ↺ usar padrão do exercício ({exercise.restSeconds}s)
-                </button>
-              </div>
-
-              <button
-                onClick={() => setSetConfigOpen(false)}
-                className="mt-4 flex min-h-[48px] w-full items-center justify-center rounded-xl bg-cyan font-mono-tactical text-sm font-bold tracking-widest text-background"
-              >
-                APLICAR
-              </button>
-            </motion.div>
-          </motion.div>
+      {/* ─────── Menu sheet ─────── */}
+      <Sheet open={menuOpen} onClose={() => setMenuOpen(false)} title="Sessão">
+        {hasSession && (
+          <>
+            {isPaused ? (
+              <SheetRow icon={<Play className="h-4 w-4" />} label="Retomar" onClick={() => { resume(); setMenuOpen(false); }} />
+            ) : (
+              <SheetRow icon={<Pause className="h-4 w-4" />} label="Pausar" onClick={() => { pause(); setMenuOpen(false); }} />
+            )}
+            <SheetRow
+              icon={<LibraryIcon className="h-4 w-4" />}
+              label="Sugerir alternativa"
+              onClick={() => {
+                setMenuOpen(false);
+                navigate({ to: "/library", search: { swap: exercise?.id ?? "", day: day.id, muscle: exercise?.primary ?? "" } as never });
+              }}
+            />
+            <SheetRow icon={<ListChecks className="h-4 w-4" />} label="Ver plano completo" onClick={() => { setPlanOpen(true); setMenuOpen(false); }} />
+            <SheetRow icon={<Square className="h-4 w-4" />} label="Finalizar sessão" onClick={handleFinish} />
+            <SheetRow icon={<Trash2 className="h-4 w-4" />} label="Descartar sessão" tone="danger" onClick={() => { setDiscardOpen(true); setMenuOpen(false); }} />
+          </>
         )}
-      </AnimatePresence>
+        {!hasSession && (
+          <>
+            <SheetRow icon={<Play className="h-4 w-4" />} label="Iniciar treino" onClick={() => { setMenuOpen(false); handleStart(); }} />
+            <SheetRow icon={<ListChecks className="h-4 w-4" />} label="Ver plano" onClick={() => { setPlanOpen(true); setMenuOpen(false); }} />
+          </>
+        )}
+      </Sheet>
+
+      {/* ─────── Day picker sheet ─────── */}
+      <Sheet open={dayPickerOpen} onClose={() => setDayPickerOpen(false)} title="Escolher dia">
+        {routine.days.map((d) => (
+          <SheetRow
+            key={d.id}
+            icon={<span className="font-mono text-[10px] tracking-widest text-muted-foreground w-8">{d.code}</span>}
+            label={d.name}
+            active={d.id === active.dayId}
+            onClick={() => { selectDay(d.id); setDayPickerOpen(false); }}
+          />
+        ))}
+      </Sheet>
+
+      {/* ─────── Plan sheet ─────── */}
+      <Sheet open={planOpen} onClose={() => setPlanOpen(false)} title={`${day.name} · plano`}>
+        <div className="max-h-[50vh] overflow-y-auto">
+          {day.exercises.map((ex, i) => {
+            const done = ex.sets.every((s) => s.completed);
+            const isCur = i === active.exerciseIndex;
+            const doneCount = ex.sets.filter((s) => s.completed).length;
+            return (
+              <button
+                key={ex.id}
+                onClick={() => { selectExercise(i); setPlanOpen(false); }}
+                className={`flex w-full items-center justify-between rounded-md px-3 py-2.5 text-left ${
+                  isCur ? "bg-primary/10 text-foreground" : "text-foreground/85 hover:bg-white/5"
+                }`}
+              >
+                <span className="flex min-w-0 items-center gap-3">
+                  <span className="font-mono w-5 text-[11px] text-muted-foreground">{String(i+1).padStart(2,"0")}</span>
+                  <span className="truncate text-sm">{ex.name}</span>
+                </span>
+                <span className="shrink-0 text-xs text-muted-foreground">
+                  {doneCount}/{ex.sets.length}{done && <span className="ml-1 text-foreground">✓</span>}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </Sheet>
+
+      {/* ─────── Set config sheet ─────── */}
+      <Sheet open={setConfigOpen && !!exercise && !!currentSet} onClose={() => setSetConfigOpen(false)} title={`Set ${active.setIndex + 1} · configuração`}>
+        {exercise && currentSet && (
+          <>
+            <label className="flex items-center justify-between rounded-md px-3 py-2.5">
+              <span className="text-sm text-foreground">Warm-up <span className="text-xs text-muted-foreground">(não conta volume)</span></span>
+              <input
+                type="checkbox"
+                checked={!!currentSet.isWarmup}
+                onChange={() => toggleWarmup(exercise.id, active.setIndex)}
+                className="h-5 w-5"
+              />
+            </label>
+            <div className="px-3 pt-2">
+              <div className="text-xs text-muted-foreground">Descanso deste set</div>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {[30, 45, 60, 90, 120, 180].map((s) => {
+                  const isCur = (currentSet.restSeconds ?? exercise.restSeconds) === s;
+                  return (
+                    <button
+                      key={s}
+                      onClick={() => setSetRest(exercise.id, active.setIndex, s)}
+                      className={`min-h-[40px] flex-1 rounded-md border text-sm ${isCur ? "border-primary text-primary" : "border-border text-foreground"}`}
+                    >
+                      {s}s
+                    </button>
+                  );
+                })}
+              </div>
+              <button
+                onClick={() => setSetRest(exercise.id, active.setIndex, undefined)}
+                className="mt-3 text-xs text-muted-foreground hover:text-foreground"
+              >
+                ↺ padrão ({exercise.restSeconds}s)
+              </button>
+            </div>
+          </>
+        )}
+      </Sheet>
 
       {/* ─────── Discard confirm ─────── */}
       <AnimatePresence>
         {discardOpen && (
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 grid place-items-center bg-black/80 p-4"
+            className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4"
             onClick={() => setDiscardOpen(false)}
           >
             <motion.div
-              initial={{ scale: 0.95 }} animate={{ scale: 1 }} exit={{ scale: 0.95 }}
+              initial={{ scale: 0.96 }} animate={{ scale: 1 }} exit={{ scale: 0.96 }}
               onClick={(e) => e.stopPropagation()}
-              className="glass-strong w-full max-w-sm rounded-2xl border border-rose-500/30 p-4 text-center"
+              className="w-full max-w-sm rounded-2xl border border-border bg-background p-5 text-center"
             >
-              <Trash2 className="mx-auto h-8 w-8 text-rose-400" />
-              <h3 className="mt-2 text-lg font-bold text-foreground">Descartar sessão?</h3>
-              <p className="mt-1 text-sm text-muted-foreground">Todos os sets marcados serão zerados e nenhum dado será salvo.</p>
-              <div className="mt-4 flex gap-2">
-                <button onClick={() => setDiscardOpen(false)} className="glass min-h-[44px] flex-1 rounded-xl text-sm">Cancelar</button>
+              <Trash2 className="mx-auto h-6 w-6 text-muted-foreground" />
+              <h3 className="mt-3 text-base font-semibold text-foreground">Descartar sessão?</h3>
+              <p className="mt-1 text-sm text-muted-foreground">Sets marcados serão zerados. Nada será salvo.</p>
+              <div className="mt-5 flex gap-2">
+                <button onClick={() => setDiscardOpen(false)} className="min-h-[44px] flex-1 rounded-xl border border-border text-sm">Cancelar</button>
                 <button
                   onClick={() => { discard(); setDiscardOpen(false); toast.message("Sessão descartada"); }}
-                  className="min-h-[44px] flex-1 rounded-xl bg-rose-500 text-sm font-bold text-white"
+                  className="min-h-[44px] flex-1 rounded-xl bg-destructive text-sm font-semibold text-destructive-foreground"
                 >
                   Descartar
                 </button>
@@ -552,7 +504,6 @@ function WorkoutConsole() {
         )}
       </AnimatePresence>
 
-      {/* ─────── Summary modal ─────── */}
       <SessionSummaryModal summary={lastSummary} onClose={clearSummary} />
     </main>
   );
@@ -567,63 +518,80 @@ function nextLabel(day: { exercises: { name: string; sets: { completed: boolean 
   return nxt ? `${nxt.name} · Set 1` : "Sessão completa";
 }
 
-function NavBtn({ children, onClick, "aria-label": ariaLabel }: { children: React.ReactNode; onClick: () => void; "aria-label"?: string }) {
+const MinimalStepper = memo(function Stepper({
+  label, unit, value, onMinus, onPlus,
+}: { label: string; unit: string; value: number; onMinus: () => void; onPlus: () => void }) {
   return (
-    <motion.button
-      whileTap={{ scale: 0.92 }}
-      onClick={onClick}
-      aria-label={ariaLabel}
-      className="glass grid h-10 w-10 shrink-0 place-items-center rounded-lg text-foreground hover:text-cyan"
-    >
-      {children}
-    </motion.button>
-  );
-}
-
-function CtrlBtn({ children, onClick, "aria-label": ariaLabel, tone }: { children: React.ReactNode; onClick: () => void; "aria-label"?: string; tone: "cyan" | "matrix" | "amber" | "danger" }) {
-  const color =
-    tone === "cyan" ? "text-cyan ring-cyan/30" :
-    tone === "matrix" ? "text-matrix ring-matrix/30" :
-    tone === "amber" ? "text-amber ring-amber/30" : "text-rose-400 ring-rose-500/30";
-  return (
-    <motion.button
-      whileTap={{ scale: 0.92 }}
-      onClick={onClick}
-      aria-label={ariaLabel}
-      className={`glass flex h-8 items-center gap-1 rounded-md px-2 font-mono-tactical text-[9px] tracking-widest ring-1 ${color}`}
-    >
-      {children}
-    </motion.button>
-  );
-}
-
-const MemoStepper = memo(function Stepper({
-  label, unit, value, onMinus, onPlus, tone,
-}: { label: string; unit: string; value: number; onMinus: () => void; onPlus: () => void; tone: "cyan" | "matrix" }) {
-  const color = tone === "cyan" ? "text-cyan" : "text-matrix";
-  const glow = tone === "cyan" ? "rgba(0,240,255,0.5)" : "rgba(57,255,20,0.5)";
-  return (
-    <div className="glass flex flex-col rounded-xl p-2">
-      <div className="text-center font-mono-tactical text-[9px] tracking-[0.28em] text-muted-foreground">{label}</div>
-      <div className="mt-1 flex items-center justify-between gap-1">
-        <motion.button whileTap={{ scale: 0.88 }} onClick={onMinus}
-          className="grid h-12 w-12 shrink-0 place-items-center rounded-lg bg-white/[0.05] text-foreground ring-1 ring-white/10 active:bg-white/10"
-          aria-label={`Diminuir ${label}`}>
-          <Minus className="h-5 w-5" />
-        </motion.button>
-        <div className="flex flex-1 flex-col items-center">
-          <span className={`font-mono-tactical font-bold leading-none tracking-tight ${color}`}
-            style={{ textShadow: `0 0 14px ${glow}`, fontSize: "clamp(1.5rem, 7vw, 2rem)" }}>
-            {value}
-          </span>
-          <span className="font-mono-tactical mt-0.5 text-[9px] tracking-widest text-muted-foreground">{unit}</span>
-        </div>
-        <motion.button whileTap={{ scale: 0.88 }} onClick={onPlus}
-          className="grid h-12 w-12 shrink-0 place-items-center rounded-lg bg-white/[0.05] text-foreground ring-1 ring-white/10 active:bg-white/10"
-          aria-label={`Aumentar ${label}`}>
-          <Plus className="h-5 w-5" />
-        </motion.button>
+    <div className="flex items-center justify-between rounded-xl border border-border px-3 py-3">
+      <button
+        onClick={onMinus}
+        aria-label={`Diminuir ${label}`}
+        className="grid h-11 w-11 place-items-center rounded-full bg-white/[0.04] text-foreground active:bg-white/10"
+      >
+        <Minus className="h-5 w-5" />
+      </button>
+      <div className="flex flex-col items-center">
+        <span className="text-[10px] uppercase tracking-widest text-muted-foreground">{label}</span>
+        <span className="font-mono text-4xl font-semibold leading-none text-foreground">
+          {value}
+          {unit && <span className="ml-1 text-base font-normal text-muted-foreground">{unit}</span>}
+        </span>
       </div>
+      <button
+        onClick={onPlus}
+        aria-label={`Aumentar ${label}`}
+        className="grid h-11 w-11 place-items-center rounded-full bg-white/[0.04] text-foreground active:bg-white/10"
+      >
+        <Plus className="h-5 w-5" />
+      </button>
     </div>
   );
 });
+
+/* ─────────── Minimal bottom sheet ─────────── */
+function Sheet({
+  open, onClose, title, children,
+}: { open: boolean; onClose: () => void; title: string; children: React.ReactNode }) {
+  return (
+    <AnimatePresence>
+      {open && (
+        <motion.div
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm sm:items-center"
+          onClick={onClose}
+        >
+          <motion.div
+            initial={{ y: 60 }} animate={{ y: 0 }} exit={{ y: 60 }}
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md rounded-t-2xl border border-border bg-background p-2 pb-4 sm:rounded-2xl"
+          >
+            <div className="flex items-center justify-between px-3 py-2">
+              <span className="text-xs uppercase tracking-widest text-muted-foreground">{title}</span>
+              <button onClick={onClose} aria-label="Fechar" className="grid h-8 w-8 place-items-center rounded-md text-muted-foreground hover:bg-white/5">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="flex flex-col">{children}</div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
+function SheetRow({
+  icon, label, onClick, tone, active,
+}: { icon: React.ReactNode; label: string; onClick: () => void; tone?: "danger"; active?: boolean }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex items-center gap-3 rounded-md px-3 py-3 text-left text-sm hover:bg-white/5 ${
+        tone === "danger" ? "text-destructive" : active ? "text-primary" : "text-foreground"
+      }`}
+    >
+      <span className="shrink-0">{icon}</span>
+      <span className="flex-1">{label}</span>
+      {active && <Check className="h-4 w-4" />}
+    </button>
+  );
+}

@@ -300,6 +300,7 @@ interface State {
 
   /* session control */
   startWorkout: (dayId: string) => void;
+  selectDay: (dayId: string) => void;
   pauseSession: () => void;
   resumeSession: () => void;
   discardSession: () => void;
@@ -695,6 +696,14 @@ export const useMarcolaStore = create<State>()(
         active: { dayId, exerciseIndex: 0, setIndex: 0, startedAt: Date.now(), finishedAt: null, pausedAt: null, totalPausedMs: 0, log: [] },
         rest: { active: false, remaining: 0, total: 0 },
         lastSummary: null,
+      }),
+
+      selectDay: (dayId) => set((s) => {
+        // Só troca o dia visualmente — não inicia cronômetro.
+        // Se há sessão ativa, não permite trocar (usuário deve descartar/finalizar antes).
+        if (s.active.startedAt !== null && s.active.finishedAt === null) return s;
+        if (s.active.dayId === dayId) return s;
+        return { active: { ...emptyActive, dayId } };
       }),
 
       pauseSession: () => set((s) => s.active.pausedAt ? s : ({ active: { ...s.active, pausedAt: Date.now() } })),
