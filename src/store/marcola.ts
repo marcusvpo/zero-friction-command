@@ -293,6 +293,7 @@ interface State {
   swapExercise: (dayId: string, exerciseId: string, libraryId: string) => void;
   removeExercise: (dayId: string, exerciseId: string) => void;
   renameExercise: (dayId: string, exerciseId: string, name: string) => void;
+  reorderExercises: (dayId: string, orderedIds: string[]) => void;
   updateExercise: (dayId: string, exerciseId: string, patch: Partial<Exercise>) => void;
   setSplit: (split: Routine["split"]) => void;
   assignWeekday: (weekday: number, dayId: string | null) => void;
@@ -617,6 +618,20 @@ export const useMarcolaStore = create<State>()(
           ...s.routine,
           days: s.routine.days.map((d) => d.id !== dayId ? d : {
             ...d, exercises: d.exercises.map((e) => e.id === exerciseId ? { ...e, name } : e),
+          }),
+        },
+      })),
+
+      reorderExercises: (dayId, orderedIds) => set((s) => ({
+        routine: {
+          ...s.routine,
+          days: s.routine.days.map((d) => {
+            if (d.id !== dayId) return d;
+            const byId = new Map(d.exercises.map((e) => [e.id, e]));
+            const reordered = orderedIds.map((id) => byId.get(id)).filter(Boolean) as typeof d.exercises;
+            // append any missing (safety)
+            for (const e of d.exercises) if (!orderedIds.includes(e.id)) reordered.push(e);
+            return { ...d, exercises: reordered };
           }),
         },
       })),
