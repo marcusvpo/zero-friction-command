@@ -1,85 +1,88 @@
-# Phase 9 — Inteligência Pós-Treino
 
-Três entregas + correção rápida da rotina de LEGS.
+## Escopo
 
-## 0. Correção: LEGS · "desenvolvimento" = ombro na máquina
-
-No seed da rotina (`src/store/marcola.ts`), o exercício `desenvolvimento` no dia LEGS está apontando para *Hack Squat*. Reapontar para **Desenvolvimento de Ombros na Máquina** (`primary: "shoulders"`, library `lib-desenvolvimento-maquina`). Sem mexer no resto da divisão.
+Cinco correções pontuais na camada de UI/estado — sem novas features nem mudanças de schema.
 
 ---
 
-## 1. Score 0–100 pós-treino
+### 1) Navbar fixa: background + separação visual
 
-Score exibido no `SessionSummaryModal` ao finalizar a sessão, composto por 4 componentes ponderados (transparentes, sem caixa-preta):
+Arquivo: `src/components/marcola/TopTelemetryBar.tsx`
 
-```text
-SCORE = 0.40·Execução + 0.25·Sobrecarga + 0.20·Volume + 0.15·Densidade
+- Adicionar backdrop à `<header>`: `bg-background/70 backdrop-blur-md` + borda inferior `border-b border-white/5` para dar profundidade e evitar sobreposição visual dos textos abaixo.
+- Manter `sticky top-0 z-30`. O conteúdo abaixo já respeita padding do `_app` layout; sem alterações estruturais.
+
+### 2) /intel usando 100% dados reais
+
+Arquivos: `src/components/marcola/Dashboard.tsx`, `src/store/marcola.ts`, `src/components/marcola/Charts.tsx`
+
+- **KPI Tonelagem**: `getTonnage7d()` hoje soma a rotina (placeholder). Reescrever para somar `history` (logs reais dos últimos 7 dias) com `weight * reps` excluindo warm-ups. Se `history` estiver vazio → mostrar `—`.
+- **KPI PR Watch**: `getPRWatch()` hoje varre rotina. Substituir por contagem de PRs em `pr_achievements` (via novo selector `getPRCount()` alimentado por um fetch no hydrate) ou, mais simples: derivar de `history` — nº de exercícios com peso máximo histórico batido nos últimos 7 dias. Escolha: derivar de `history` para evitar mais uma round-trip. Vazio → `—`.
+- **KPI Rest Avg**: `getAvgRest()` hoje é média da config da rotina. Trocar por média real de descanso entre sets do `history` recente (diferença de timestamps entre sets consecutivos do mesmo exercício, clampada a ≤600s). Vazio → `—`.
+- **KpiCard delta**: hoje é hardcoded `"+8.2%"`, `"armado"`, `"−4s"`. Passar a calcular deltas reais vs. janela de 7d anterior (mesma lógica acima em outra janela). Vazio → esconder o delta.
+- **VolumeChart**: hoje usa `volumeData` mock. Reescrever para consumir `weeklyVolume` (sets/7d por músculo — já real) e agrupar por região (PEITO/COSTAS/PERNAS/OMBROS/BRAÇOS/CORE).
+- **DeltaChart6w**: já é real, sem mudanças.
+
+### 3) Remover "OPERAÇÃO DE HOJE" de /intel
+
+Arquivo: `src/components/marcola/Dashboard.tsx`
+
+- Excluir a `motion.section` hero (linhas ~44-152 aprox.) — inclusive o mini week map. A CTA de iniciar treino permanece apenas em `/workout`.
+- Manter KPI strip + Delta chart + CoachIntel + Heatmap + Volume + Supplement.
+- Remover imports órfãos (`Calendar`, `Play`, `ArrowRight`, `TrendingUp`, `Link`, `WEEKDAY_LABELS`, `WEEKDAY_LONG`, `startWorkout`, `weekdayMap`, `todayDay`, `lastWeekTonnage`, `targetTonnage`) e o helper `MicroStat` se não usado.
+
+### 4) Mapa anatômico com pontos de calor vermelhos sobre os músculos
+
+Arquivo: `src/components/marcola/AnatomyHeatmap.tsx`
+
+Substituir polígonos por **pontos de calor radiais vermelhos** posicionados no centro de cada músculo (mais visual, menos dependente de traçar polígonos precisos).
+
+- Trocar `MUSCLE_PATHS` (polygons) por `MUSCLE_POINTS`: `{ id, muscle, label, cx, cy, r }` em pixels do 704×1280.
+- Renderizar cada ponto como `<circle>` com `fill="url(#heat-red)"` (radialGradient de `rgba(255,60,60,α)` no centro → transparente na borda).
+- Intensidade (α e raio) escala com `sets` via `paintFor()`:
+  - `0` → não renderiza
+  - `1-4` → α=0.45, r=42
+  - `5-8` → α=0.7, r=58
+  - `>8` → α=0.9, r=74
+- Aplicar `filter: drop-shadow(0 0 12px rgba(255,60,60,0.8))` para brilho.
+- Atualizar `defs` (novo `radialGradient id="heat-red"`) e remover o `filter#muscle-glow` ciano.
+- Atualizar `LegendDot` para vermelho.
+
+Pontos aproximados (704×1280, frente do corpo — mesma referência que a PNG usa):
 ```
+chest      cx≈352 cy≈320
+shoulders  cx≈240 cy≈280  e  cx≈464 cy≈280
+biceps     cx≈210 cy≈400  e  cx≈494 cy≈400
+triceps    cx≈182 cy≈400  e  cx≈522 cy≈400
+forearms   cx≈180 cy≈550  e  cx≈524 cy≈550
+core       cx≈352 cy≈500
+obliques   cx≈290 cy≈500  e  cx≈414 cy≈500
+lats       cx≈260 cy≈470  e  cx≈444 cy≈470
+traps      cx≈352 cy≈200
+neck       cx≈352 cy≈150
+lower-back cx≈352 cy≈600
+glutes     cx≈352 cy≈660
+quads      cx≈305 cy≈820  e  cx≈399 cy≈820
+hamstrings cx≈305 cy≈850  e  cx≈399 cy≈850
+calves     cx≈305 cy≈1080 e  cx≈399 cy≈1080
+```
+(Coordenadas serão ajustadas em build baseado no PNG real.)
 
-- **Execução (0–100):** `setsCompletos / setsPlanejados` do dia ativo.
-- **Sobrecarga (0–100):** % de exercícios em que o top set ≥ sugestão do `getSuggestion()` (peso×reps). Sem histórico → 50 (neutro).
-- **Volume (0–100):** tonelagem da sessão vs média das últimas 4 sessões do mesmo dia (`history` agrupado). 100% da média = 80 pts; +20% = 100; −20% = 60. Sem baseline → 70.
-- **Densidade (0–100):** tonelagem/minuto líquido vs descanso médio. Rest avg ≤ alvo (90s) = 100; cada +30s acima = −10.
+### 5) /workout sincronizando com o dia atual
 
-**Implementação:**
-- Estender `SessionSummary` com `score: { total, execution, overload, volume, density }`.
-- Calcular dentro de `finishWorkout()` antes de `set({ lastSummary })`.
-- `SessionSummaryModal`: novo bloco no topo — anel circular grande com `total`, e 4 micro-barras nomeadas (execução/sobrecarga/volume/densidade). Cor: ≥85 matrix, 60–84 cyan, <60 amber.
+Arquivos: `src/routes/_app.workout.tsx`, `src/store/marcola.ts`
 
----
+Problema: `active.dayId` é persistido em `localStorage` como `"d-push-a"` (seed) e nunca é atualizado para o dia da semana atual. Hoje (quarta) deveria mostrar `d-legs`.
 
-## 2. Delta Chart · 6 semanas
-
-Substituir o `TonnageChart` mockado por gráfico real de tonelagem semanal nas últimas 6 semanas (página `/intel`).
-
-**Dados:**
-- Novo seletor `getWeeklyTonnage6w()` no store — agrupa `history` (todos os exercícios) por ISO-week, soma `reps×weight` de sets não-warmup, devolve `Array<{ week: "W-5"..."W0", tonnageKg, deltaPct }>`.
-- Carrega via `loadHistory()` (já existe; chamada no boot `_app.tsx`). Se `history` vazio, mostra estado vazio "Sem dados ainda — complete 1 sessão".
-
-**UI (`src/components/marcola/Charts.tsx`):**
-- Renomear para `DeltaChart6w` (manter export `TonnageChart` como alias temporário se usado em Dashboard).
-- `ComposedChart` recharts: barras cyan = tonelagem absoluta; linha matrix = Δ% vs semana anterior; tooltip mostra "12.4 t · +6.2%".
-- Eixo X: rótulos "W-5..W0"; semana atual destacada com borda matrix.
-- Substitui blocos hardcoded `tonnageData`/`fatigueData`.
-
----
-
-## 3. Coach Intel · Crítica de Divisão/Volume
-
-Novo painel no `/intel` (acima do heatmap) com diagnóstico automático da rotina + histórico recente.
-
-**Engine (`src/lib/coach-intel.ts`):**
-- Função pura `analyzeRoutine(routine, history)` → `Array<Insight>`, onde `Insight = { severity: "ok"|"warn"|"crit", code, title, detail, action? }`.
-- Regras MVP (baseadas em literatura de hipertrofia, faixa 10–20 sets/grupo/semana):
-  1. **Volume semanal por grupo** (sets diretos planejados): `<10` = `warn` "abaixo do mínimo"; `10–20` = `ok`; `>22` = `warn` "risco de overreaching"; `>28` = `crit`.
-  2. **Frequência por grupo:** grupos compostos (peito/costas/pernas) treinados <2×/semana → `warn`.
-  3. **Razão push:pull:** desvio >30% do equilíbrio 1:1 → `warn` "desequilíbrio postural".
-  4. **Dia LEGS isolado** (sem repetição): `warn` "1×/semana subótimo para pernas".
-  5. **Frescor:** se `history` mostra mesma carga ≥3 sessões consecutivas no mesmo exercício → `warn` "estagnação detectada · considere deload ou variação".
-  6. **Densidade abdômen/cardio:** se rotina tem 0 abs e usuário marcou abs ter/qui → `ok` informativo de cumprimento.
-- Sem chamadas LLM; tudo local e determinístico.
-
-**UI (`src/components/marcola/CoachIntel.tsx`):**
-- Painel "COACH INTEL · M6" com:
-  - Cabeçalho compacto: contagem por severidade (`3 OK · 2 WARN · 0 CRIT`).
-  - Lista de cards (max 6 visíveis, "Ver todos" expande). Cada card: ícone severidade, título, detalhe 1 linha, optional ação ("Abrir Builder", link para `/builder`).
-- Inserir no `Dashboard` (rota `/intel`) entre KPI strip e Heatmap.
+- Adicionar effect em `WorkoutConsole`: se **não há sessão ativa** (`!active.startedAt`), sincronizar `active.dayId` com `weekdayMap[new Date().getDay()]` (ou primeiro dia da rotina como fallback) na montagem.
+- Implementação: novo método na store `syncActiveDayToToday()` que faz set apenas se `active.startedAt === null && active.finishedAt === null`.
+- Chamar no `useEffect` inicial do WorkoutConsole.
+- Não mexe em sessões em andamento (usuário pode estar treinando algo diferente do prescrito para hoje).
 
 ---
 
-## Arquivos a tocar
+## Notas técnicas
 
-- `src/store/marcola.ts` — fix LEGS seed; estender `SessionSummary`; calcular score em `finishWorkout`; novo seletor `getWeeklyTonnage6w()`.
-- `src/components/marcola/SessionSummaryModal.tsx` — bloco de score (anel + barras).
-- `src/components/marcola/Charts.tsx` — novo `DeltaChart6w` real; manter exports usados.
-- `src/components/marcola/Dashboard.tsx` — trocar `TonnageChart` por `DeltaChart6w` e plugar `CoachIntel`.
-- `src/lib/coach-intel.ts` — novo (regras puras).
-- `src/components/marcola/CoachIntel.tsx` — novo (UI).
-
-**Sem mudanças de schema Supabase.** Tudo derivado de `history` (já populado por `loadHistory`) + `routine`.
-
-## Fora do escopo
-
-- Persistir score histórico em tabela própria (pode vir em Phase 10 se quiser série temporal de score).
-- IA generativa para o coach.
-- Notificação push de critical insights.
+- Todas as leituras da store continuam via selectors primitivos (já corrigimos o bug de re-render infinito anteriormente); novos selectors derivados usam `useMemo` no componente com `history` como dependência.
+- Nenhuma migração SQL necessária — tudo é derivado de `workout_logs` / `pr_achievements` já existentes.
+- Sem alteração no bottom dock nem rotas.
