@@ -293,6 +293,7 @@ interface State {
   swapExercise: (dayId: string, exerciseId: string, libraryId: string) => void;
   removeExercise: (dayId: string, exerciseId: string) => void;
   renameExercise: (dayId: string, exerciseId: string, name: string) => void;
+  reorderExercises: (dayId: string, orderedIds: string[]) => void;
   updateExercise: (dayId: string, exerciseId: string, patch: Partial<Exercise>) => void;
   setSplit: (split: Routine["split"]) => void;
   assignWeekday: (weekday: number, dayId: string | null) => void;
