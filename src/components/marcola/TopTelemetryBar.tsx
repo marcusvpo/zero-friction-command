@@ -1,26 +1,51 @@
 import { Dumbbell, Layers, CloudOff } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { subscribeQueue } from "@/lib/sync-queue";
 import { useMarcolaStore } from "@/store/marcola";
 
 /**
  * TopTelemetryBar — telemetria REAL derivada do store.
- * Sem placeholders (BPM/KCAL removidos — não há sensor integrado).
  */
 export function TopTelemetryBar() {
   const [pending, setPending] = useState(0);
-  // Subscribe to primitives so React/Zustand can compare with Object.is.
-  // Calling getSessionTelemetry() directly inside a selector returns a fresh
-  // object every render → infinite update loop.
-  const volumeKg = useMarcolaStore((s) => s.getSessionTelemetry().volumeKg);
-  const sets = useMarcolaStore((s) => s.getSessionTelemetry().sets);
-  const isLive = useMarcolaStore((s) => s.getSessionTelemetry().isLive);
+  const [mounted, setMounted] = useState(false);
 
-  useEffect(() => subscribeQueue(setPending), []);
+  // Subscribe to raw state (stable refs) and derive telemetry via useMemo.
+  // Selecting `s.getSessionTelemetry().*` returns a fresh object each call →
+  // triggers React's "getSnapshot should be cached" + infinite update loop.
+  const active = useMarcolaStore((s) => s.active);
+  const lastSummary = useMarcolaStore((s) => s.lastSummary);
+  const routine = useMarcolaStore((s) => s.routine);
 
-  const volLabel = isLive ? "VOL · SESSÃO" : "VOL · ÚLTIMO";
-  const setsLabel = isLive ? "SETS · LIVE" : "SETS · ÚLTIMO";
+  const { volumeKg, sets, isLive } = useMemo(() => {
+    const live = active.startedAt !== null && active.finishedAt === null;
+    if (live) {
+      let vol = 0, s = 0;
+      for (const e of active.log) {
+        if (e.isWarmup) continue;
+        vol += e.reps * e.weight; s += 1;
+      }
+      return { volumeKg: Math.round(vol), sets: s, isLive: true };
+    }
+    if (lastSummary) {
+      return { volumeKg: lastSummary.tonnageKg, sets: lastSummary.setsCompleted, isLive: false };
+    }
+    let vol = 0, s = 0;
+    for (const day of routine.days) for (const ex of day.exercises) for (const st of ex.sets) {
+      if (st.completed && !st.isWarmup) { vol += st.reps * st.weight; s += 1; }
+    }
+    return { volumeKg: Math.round(vol), sets: s, isLive: false };
+  }, [active, lastSummary, routine]);
 
+  useEffect(() => {
+    setMounted(true);
+    return subscribeQueue(setPending);
+  }, []);
+
+  // Avoid SSR/client hydration mismatch: neutral labels until mounted.
+  const showLive = mounted && isLive;
+  const volLabel = showLive ? "VOL · SESSÃO" : "VOL · ÚLTIMO";
+  const setsLabel = showLive ? "SETS · LIVE" : "SETS · ÚLTIMO";
 
   return (
     <header className="sticky top-0 z-30 border-b border-white/5 bg-background/70 px-4 pt-6 pb-4 backdrop-blur-xl">
@@ -39,7 +64,7 @@ export function TopTelemetryBar() {
             </span>
           ) : (
             <span className="font-mono-tactical truncate text-[10px] tracking-[0.18em] text-muted-foreground/80">
-              {isLive ? "SESSÃO · LIVE" : "SISTEMA · ONLINE"}
+              {showLive ? "SESSÃO · LIVE" : "SISTEMA · ONLINE"}
             </span>
           )}
         </div>
@@ -50,7 +75,7 @@ export function TopTelemetryBar() {
             value={volumeKg > 0 ? volumeKg.toLocaleString("pt-BR") : "—"}
             unit="KG"
             label={volLabel}
-            tone={isLive ? "text-matrix" : "text-cyan"}
+            tone={showLive ? "text-matrix" : "text-cyan"}
           />
           <Telemetry
             icon={Layers}
@@ -59,7 +84,6 @@ export function TopTelemetryBar() {
             label={setsLabel}
             tone="text-amber"
           />
-
         </div>
       </div>
     </header>
