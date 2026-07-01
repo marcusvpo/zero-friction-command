@@ -438,6 +438,19 @@ export const useMarcolaStore = create<State>()(
         return { volumeKg: Math.round(vol), sets, isLive: false };
       },
 
+      syncActiveDayToToday: () => {
+        const { active, weekdayMap, routine } = get();
+        // Only sync when no session is in progress.
+        if (active.startedAt !== null && active.finishedAt === null) return;
+        const todayId = weekdayMap[new Date().getDay()];
+        const target = todayId
+          ? routine.days.find((d) => d.id === todayId)?.id ?? null
+          : null;
+        const fallback = target ?? routine.days[0]?.id ?? null;
+        if (!fallback || fallback === active.dayId) return;
+        set({ active: { ...emptyActive, dayId: fallback } });
+      },
+
       wipeData: async () => {
         // Limpa estado local + fila offline; preserva rotina/biométricos/suplementos.
         if (typeof window !== "undefined") {

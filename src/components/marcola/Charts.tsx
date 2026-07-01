@@ -12,15 +12,7 @@ import {
 } from "recharts";
 import { useMemo } from "react";
 import { useMarcolaStore } from "@/store/marcola";
-
-const volumeData = [
-  { m: "PEITO", v: 18 },
-  { m: "COSTAS", v: 22 },
-  { m: "PERNAS", v: 26 },
-  { m: "OMBROS", v: 14 },
-  { m: "BRAÇO", v: 16 },
-  { m: "CORE", v: 9 },
-];
+import { groupWeeklyVolume } from "@/lib/intel-kpis";
 
 const axisStyle = {
   fontSize: 9,
