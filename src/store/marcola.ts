@@ -698,6 +698,14 @@ export const useMarcolaStore = create<State>()(
         lastSummary: null,
       }),
 
+      selectDay: (dayId) => set((s) => {
+        // Só troca o dia visualmente — não inicia cronômetro.
+        // Se há sessão ativa, não permite trocar (usuário deve descartar/finalizar antes).
+        if (s.active.startedAt !== null && s.active.finishedAt === null) return s;
+        if (s.active.dayId === dayId) return s;
+        return { active: { ...emptyActive, dayId } };
+      }),
+
       pauseSession: () => set((s) => s.active.pausedAt ? s : ({ active: { ...s.active, pausedAt: Date.now() } })),
 
       resumeSession: () => set((s) => {
