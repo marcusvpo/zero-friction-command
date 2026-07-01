@@ -47,6 +47,9 @@ function WorkoutConsole() {
   const adjustRestForRPE = useMarcolaStore((s) => s.adjustRestForRPE);
   const seenSwipeHint = useMarcolaStore((s) => s.seenSwipeHint);
   const markSwipeHintSeen = useMarcolaStore((s) => s.markSwipeHintSeen);
+  const syncActiveDayToToday = useMarcolaStore((s) => s.syncActiveDayToToday);
+
+  useEffect(() => { syncActiveDayToToday(); }, [syncActiveDayToToday]);
 
   const day = routine.days.find((d) => d.id === active.dayId) ?? routine.days[0];
   const exercise = day.exercises[active.exerciseIndex];

@@ -275,6 +275,7 @@ interface State {
   isPaused: () => boolean;
   hasActiveSession: () => boolean;
   getSessionTelemetry: () => SessionTelemetry;
+  syncActiveDayToToday: () => void;
 
   /* lifecycle */
   wipeData: () => Promise<void>;
@@ -435,6 +436,19 @@ export const useMarcolaStore = create<State>()(
           if (s.completed && !s.isWarmup) { vol += s.reps * s.weight; sets += 1; }
         }
         return { volumeKg: Math.round(vol), sets, isLive: false };
+      },
+
+      syncActiveDayToToday: () => {
+        const { active, weekdayMap, routine } = get();
+        // Only sync when no session is in progress.
+        if (active.startedAt !== null && active.finishedAt === null) return;
+        const todayId = weekdayMap[new Date().getDay()];
+        const target = todayId
+          ? routine.days.find((d) => d.id === todayId)?.id ?? null
+          : null;
+        const fallback = target ?? routine.days[0]?.id ?? null;
+        if (!fallback || fallback === active.dayId) return;
+        set({ active: { ...emptyActive, dayId: fallback } });
       },
 
       wipeData: async () => {

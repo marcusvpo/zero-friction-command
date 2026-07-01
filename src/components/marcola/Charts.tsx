@@ -12,15 +12,7 @@ import {
 } from "recharts";
 import { useMemo } from "react";
 import { useMarcolaStore } from "@/store/marcola";
-
-const volumeData = [
-  { m: "PEITO", v: 18 },
-  { m: "COSTAS", v: 22 },
-  { m: "PERNAS", v: 26 },
-  { m: "OMBROS", v: 14 },
-  { m: "BRAÇO", v: 16 },
-  { m: "CORE", v: 9 },
-];
+import { groupWeeklyVolume } from "@/lib/intel-kpis";
 
 const axisStyle = {
   fontSize: 9,
@@ -121,14 +113,32 @@ export function DeltaChart6w() {
 export const TonnageChart = DeltaChart6w;
 
 export function VolumeChart() {
+  const weekly = useMarcolaStore((s) => s.weeklyVolume);
+  const data = useMemo(() => groupWeeklyVolume(weekly), [weekly]);
+  const hasData = data.some((d) => d.v > 0);
+
+  if (!hasData) {
+    return (
+      <div className="grid h-40 w-full place-items-center rounded-lg bg-white/[0.02] text-center">
+        <div className="font-mono-tactical text-[10px] tracking-widest text-muted-foreground">
+          SEM SETS REGISTRADOS · 7D
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="h-40 w-full">
       <ResponsiveContainer>
-        <BarChart data={volumeData} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
+        <BarChart data={data} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
           <CartesianGrid stroke="oklch(0.25 0.02 260)" strokeDasharray="2 4" vertical={false} />
           <XAxis dataKey="m" tick={{ ...axisStyle, fontSize: 8 }} axisLine={{ stroke: "oklch(0.3 0.02 260)" }} tickLine={false} />
-          <YAxis tick={axisStyle} axisLine={false} tickLine={false} width={32} />
-          <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "rgba(0,240,255,0.05)" }} />
+          <YAxis tick={axisStyle} axisLine={false} tickLine={false} width={32} allowDecimals={false} />
+          <Tooltip
+            contentStyle={tooltipStyle}
+            cursor={{ fill: "rgba(0,240,255,0.05)" }}
+            formatter={(value: number) => [`${value} sets`, "Volume"]}
+          />
           <Bar dataKey="v" fill="#00F0FF" radius={[1, 1, 0, 0]} style={{ filter: "drop-shadow(0 0 3px #00F0FF)" }} />
         </BarChart>
       </ResponsiveContainer>
