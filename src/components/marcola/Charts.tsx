@@ -43,7 +43,12 @@ const tooltipStyle = {
  * Bars = absolute tonnage (kg); Line = Δ% vs previous week.
  */
 export function DeltaChart6w() {
-  const weeks = useMarcolaStore(useShallow((s) => s.getWeeklyTonnage6w()));
+  // Subscribe to raw history and recompute — the store selector rebuilds new
+  // object literals every call, which defeats shallow-eq and causes an infinite
+  // re-render loop when read via useShallow.
+  const history = useMarcolaStore((s) => s.history);
+  const compute = useMarcolaStore((s) => s.getWeeklyTonnage6w);
+  const weeks = useMemo(() => compute(), [compute, history]);
   const hasData = weeks.some((w) => w.tonnageKg > 0);
 
   if (!hasData) {
