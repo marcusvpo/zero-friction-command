@@ -163,44 +163,33 @@ function BuilderPage() {
                     <p className="font-mono-tactical mb-2 mt-2 text-[10px] uppercase tracking-widest text-muted-foreground">
                       {day.focus}
                     </p>
-                    <ul className="space-y-1">
+                    <Reorder.Group
+                      axis="y"
+                      values={day.exercises}
+                      onReorder={(next) => reorderExercises(day.id, next.map((e) => e.id))}
+                      className="space-y-1"
+                    >
                       {day.exercises.map((ex) => {
                         const isEditing = editing?.dayId === day.id && editing.exerciseId === ex.id;
                         return (
-                          <li key={ex.id}
-                            className="flex min-h-[44px] items-center justify-between gap-2 rounded-md px-2 py-1 text-[11px] hover:bg-white/5">
-                            {isEditing ? (
-                              <input
-                                autoFocus value={draft}
-                                onChange={(e) => setDraft(e.target.value)}
-                                onBlur={() => {
-                                  renameExercise(day.id, ex.id, draft.trim() || ex.name);
-                                  setEditing(null); toast.success("Exercício atualizado");
-                                }}
-                                onKeyDown={(e) => {
-                                  if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-                                  if (e.key === "Escape") setEditing(null);
-                                }}
-                                className="font-mono-tactical w-full rounded bg-transparent px-2 py-1 text-[12px] text-cyan outline-none ring-1 ring-cyan/40"
-                              />
-                            ) : (
-                              <span className="min-w-0 flex-1 truncate text-foreground">{ex.name}</span>
-                            )}
-                            <span className="font-mono-tactical shrink-0 text-[10px] tracking-widest text-muted-foreground">
-                              {ex.sets.length}×{ex.sets[0]?.reps ?? 0}
-                            </span>
-                            <div className="flex shrink-0 gap-0.5">
-                              <IconAction onClick={() => { setEditing({ dayId: day.id, exerciseId: ex.id }); setDraft(ex.name); }}>
-                                <Edit3 className="h-3.5 w-3.5" />
-                              </IconAction>
-                              <IconAction onClick={() => { removeExercise(day.id, ex.id); toast.error(`${ex.name} removido`); }}>
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </IconAction>
-                            </div>
-                          </li>
+                          <ExerciseRow
+                            key={ex.id}
+                            ex={ex}
+                            isEditing={isEditing}
+                            draft={draft}
+                            setDraft={setDraft}
+                            onCommitRename={() => {
+                              renameExercise(day.id, ex.id, draft.trim() || ex.name);
+                              setEditing(null);
+                              toast.success("Exercício atualizado");
+                            }}
+                            onCancelEdit={() => setEditing(null)}
+                            onStartEdit={() => { setEditing({ dayId: day.id, exerciseId: ex.id }); setDraft(ex.name); }}
+                            onRemove={() => { removeExercise(day.id, ex.id); toast.error(`${ex.name} removido`); }}
+                          />
                         );
                       })}
-                    </ul>
+                    </Reorder.Group>
                     <motion.button
                       whileTap={{ scale: 0.97 }}
                       onClick={() => { addExercise(day.id); toast.success(`Exercício adicionado em ${day.name}`); }}
