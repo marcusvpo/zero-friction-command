@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as AppIndexRouteImport } from './routes/_app.index'
 import { Route as AppWorkoutRouteImport } from './routes/_app.workout'
+import { Route as AppTerminalRouteImport } from './routes/_app.terminal'
 import { Route as AppOperatorRouteImport } from './routes/_app.operator'
 import { Route as AppLogisticsRouteImport } from './routes/_app.logistics'
 import { Route as AppLibraryRouteImport } from './routes/_app.library'
@@ -30,6 +31,11 @@ const AppIndexRoute = AppIndexRouteImport.update({
 const AppWorkoutRoute = AppWorkoutRouteImport.update({
   id: '/workout',
   path: '/workout',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppTerminalRoute = AppTerminalRouteImport.update({
+  id: '/terminal',
+  path: '/terminal',
   getParentRoute: () => AppRoute,
 } as any)
 const AppOperatorRoute = AppOperatorRouteImport.update({
@@ -65,6 +71,7 @@ export interface FileRoutesByFullPath {
   '/library': typeof AppLibraryRoute
   '/logistics': typeof AppLogisticsRoute
   '/operator': typeof AppOperatorRoute
+  '/terminal': typeof AppTerminalRoute
   '/workout': typeof AppWorkoutRoute
 }
 export interface FileRoutesByTo {
@@ -73,6 +80,7 @@ export interface FileRoutesByTo {
   '/library': typeof AppLibraryRoute
   '/logistics': typeof AppLogisticsRoute
   '/operator': typeof AppOperatorRoute
+  '/terminal': typeof AppTerminalRoute
   '/workout': typeof AppWorkoutRoute
   '/': typeof AppIndexRoute
 }
@@ -84,6 +92,7 @@ export interface FileRoutesById {
   '/_app/library': typeof AppLibraryRoute
   '/_app/logistics': typeof AppLogisticsRoute
   '/_app/operator': typeof AppOperatorRoute
+  '/_app/terminal': typeof AppTerminalRoute
   '/_app/workout': typeof AppWorkoutRoute
   '/_app/': typeof AppIndexRoute
 }
@@ -96,6 +105,7 @@ export interface FileRouteTypes {
     | '/library'
     | '/logistics'
     | '/operator'
+    | '/terminal'
     | '/workout'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -104,6 +114,7 @@ export interface FileRouteTypes {
     | '/library'
     | '/logistics'
     | '/operator'
+    | '/terminal'
     | '/workout'
     | '/'
   id:
@@ -114,6 +125,7 @@ export interface FileRouteTypes {
     | '/_app/library'
     | '/_app/logistics'
     | '/_app/operator'
+    | '/_app/terminal'
     | '/_app/workout'
     | '/_app/'
   fileRoutesById: FileRoutesById
@@ -143,6 +155,13 @@ declare module '@tanstack/react-router' {
       path: '/workout'
       fullPath: '/workout'
       preLoaderRoute: typeof AppWorkoutRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/terminal': {
+      id: '/_app/terminal'
+      path: '/terminal'
+      fullPath: '/terminal'
+      preLoaderRoute: typeof AppTerminalRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/operator': {
@@ -189,6 +208,7 @@ interface AppRouteChildren {
   AppLibraryRoute: typeof AppLibraryRoute
   AppLogisticsRoute: typeof AppLogisticsRoute
   AppOperatorRoute: typeof AppOperatorRoute
+  AppTerminalRoute: typeof AppTerminalRoute
   AppWorkoutRoute: typeof AppWorkoutRoute
   AppIndexRoute: typeof AppIndexRoute
 }
@@ -199,6 +219,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppLibraryRoute: AppLibraryRoute,
   AppLogisticsRoute: AppLogisticsRoute,
   AppOperatorRoute: AppOperatorRoute,
+  AppTerminalRoute: AppTerminalRoute,
   AppWorkoutRoute: AppWorkoutRoute,
   AppIndexRoute: AppIndexRoute,
 }
