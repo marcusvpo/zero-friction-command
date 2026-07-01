@@ -1,53 +1,49 @@
-import { Activity, BarChart3, Wrench, UserCog, Plus } from "lucide-react";
-import { useState } from "react";
+import { Activity, BarChart3, Wrench, UserCog, Dumbbell } from "lucide-react";
 import { motion } from "framer-motion";
 import { Link, useRouterState } from "@tanstack/react-router";
-import { QuickLogSheet } from "./QuickLogDrawer";
 
 const items = [
-  { id: "terminal", to: "/workout",  label: "Terminal", icon: Activity },
+  { id: "terminal", to: "/terminal", label: "Terminal", icon: Activity },
   { id: "intel",    to: "/intel",    label: "Intel",    icon: BarChart3 },
   { id: "builder",  to: "/builder",  label: "Builder",  icon: Wrench },
   { id: "operator", to: "/operator", label: "Operator", icon: UserCog },
 ] as const;
 
 export function BottomDock() {
-  const [quickOpen, setQuickOpen] = useState(false);
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const isActive = (to: string) => (to === "/" ? pathname === "/" : pathname.startsWith(to));
+  const workoutActive = isActive("/workout");
 
   return (
-    <>
-      <QuickLogSheet open={quickOpen} onOpenChange={setQuickOpen} />
-      <nav className="pointer-events-none sticky bottom-0 z-30 px-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-3">
-        <div className="relative mx-auto flex max-w-[420px] items-center justify-around rounded-full glass-strong px-3 py-2.5 shadow-[0_18px_50px_-15px_rgba(0,0,0,0.6)] pointer-events-auto">
-          {items.slice(0, 2).map((it) => (
-            <DockLink key={it.id} item={it} active={isActive(it.to)} />
-          ))}
+    <nav className="pointer-events-none sticky bottom-0 z-30 px-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-3">
+      <div className="relative mx-auto flex max-w-[420px] items-center justify-around rounded-full glass-strong px-3 py-2.5 shadow-[0_18px_50px_-15px_rgba(0,0,0,0.6)] pointer-events-auto">
+        {items.slice(0, 2).map((it) => (
+          <DockLink key={it.id} item={it} active={isActive(it.to)} />
+        ))}
 
-          <motion.button
-            whileTap={{ scale: 0.88 }}
-            whileHover={{ scale: 1.04 }}
-            onClick={() => setQuickOpen(true)}
-            aria-label="Registro rápido"
-            className="relative -mt-7 flex h-14 w-14 items-center justify-center rounded-full bg-cyan text-background shadow-[0_0_24px_color-mix(in_oklab,var(--cyan)_55%,transparent)] ring-4 ring-background"
-          >
-            <Plus className="h-5 w-5" strokeWidth={2.5} />
-          </motion.button>
+        <Link
+          to="/workout"
+          aria-label="Treino"
+          aria-current={workoutActive ? "page" : undefined}
+          className="relative -mt-7 flex h-14 w-14 items-center justify-center rounded-full bg-cyan text-background shadow-[0_0_24px_color-mix(in_oklab,var(--cyan)_55%,transparent)] ring-4 ring-background"
+        >
+          <motion.span whileTap={{ scale: 0.88 }} whileHover={{ scale: 1.04 }} className="grid place-items-center">
+            <Dumbbell className="h-6 w-6" strokeWidth={2.25} />
+          </motion.span>
+        </Link>
 
-          {items.slice(2).map((it) => (
-            <DockLink key={it.id} item={it} active={isActive(it.to)} />
-          ))}
-        </div>
-      </nav>
-    </>
+        {items.slice(2).map((it) => (
+          <DockLink key={it.id} item={it} active={isActive(it.to)} />
+        ))}
+      </div>
+    </nav>
   );
 }
 
 function DockLink({
   item, active,
 }: {
-  item: { id: string; to: string; label: string; icon: typeof Plus };
+  item: { id: string; to: string; label: string; icon: typeof Dumbbell };
   active: boolean;
 }) {
   const Icon = item.icon;
