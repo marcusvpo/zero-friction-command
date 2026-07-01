@@ -622,6 +622,20 @@ export const useMarcolaStore = create<State>()(
         },
       })),
 
+      reorderExercises: (dayId, orderedIds) => set((s) => ({
+        routine: {
+          ...s.routine,
+          days: s.routine.days.map((d) => {
+            if (d.id !== dayId) return d;
+            const byId = new Map(d.exercises.map((e) => [e.id, e]));
+            const reordered = orderedIds.map((id) => byId.get(id)).filter(Boolean) as typeof d.exercises;
+            // append any missing (safety)
+            for (const e of d.exercises) if (!orderedIds.includes(e.id)) reordered.push(e);
+            return { ...d, exercises: reordered };
+          }),
+        },
+      })),
+
       updateExercise: (dayId, exerciseId, patch) => set((s) => ({
         routine: {
           ...s.routine,
