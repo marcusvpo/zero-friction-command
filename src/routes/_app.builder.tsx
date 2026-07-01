@@ -220,3 +220,64 @@ function IconAction({ children, onClick }: { children: React.ReactNode; onClick:
     </motion.button>
   );
 }
+
+type ExerciseRowProps = {
+  ex: { id: string; name: string; sets: { reps: number }[] };
+  isEditing: boolean;
+  draft: string;
+  setDraft: (v: string) => void;
+  onCommitRename: () => void;
+  onCancelEdit: () => void;
+  onStartEdit: () => void;
+  onRemove: () => void;
+};
+
+function ExerciseRow({
+  ex, isEditing, draft, setDraft,
+  onCommitRename, onCancelEdit, onStartEdit, onRemove,
+}: ExerciseRowProps) {
+  const controls = useDragControls();
+  return (
+    <Reorder.Item
+      value={ex}
+      dragListener={false}
+      dragControls={controls}
+      className="flex min-h-[44px] items-center justify-between gap-2 rounded-md bg-white/[0.02] px-2 py-1 text-[11px] hover:bg-white/5"
+    >
+      <button
+        type="button"
+        aria-label="Arrastar para reordenar"
+        onPointerDown={(e) => { e.preventDefault(); controls.start(e); }}
+        style={{ touchAction: "none" }}
+        className="grid h-9 w-6 shrink-0 cursor-grab place-items-center text-muted-foreground hover:text-cyan active:cursor-grabbing"
+      >
+        <GripVertical className="h-4 w-4" />
+      </button>
+      {isEditing ? (
+        <input
+          autoFocus value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={onCommitRename}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+            if (e.key === "Escape") onCancelEdit();
+          }}
+          className="font-mono-tactical w-full rounded bg-transparent px-2 py-1 text-[12px] text-cyan outline-none ring-1 ring-cyan/40"
+        />
+      ) : (
+        <span className="min-w-0 flex-1 truncate text-foreground">{ex.name}</span>
+      )}
+      <span className="font-mono-tactical shrink-0 text-[10px] tracking-widest text-muted-foreground">
+        {ex.sets.length}×{ex.sets[0]?.reps ?? 0}
+      </span>
+      <div className="flex shrink-0 gap-0.5">
+        <IconAction onClick={onStartEdit}>
+          <Edit3 className="h-3.5 w-3.5" />
+        </IconAction>
+        <IconAction onClick={onRemove}>
+          <Trash2 className="h-3.5 w-3.5" />
+        </IconAction>
+      </div>
+    </Reorder.Item>
+  );
+}
