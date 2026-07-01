@@ -300,6 +300,7 @@ interface State {
 
   /* session control */
   startWorkout: (dayId: string) => void;
+  selectDay: (dayId: string) => void;
   pauseSession: () => void;
   resumeSession: () => void;
   discardSession: () => void;
