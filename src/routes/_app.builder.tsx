@@ -33,6 +33,7 @@ function BuilderPage() {
   const addExercise = useMarcolaStore((s) => s.addExerciseToDay);
   const removeExercise = useMarcolaStore((s) => s.removeExercise);
   const renameExercise = useMarcolaStore((s) => s.renameExercise);
+  const reorderExercises = useMarcolaStore((s) => s.reorderExercises);
   const persistRoutine = useMarcolaStore((s) => s.persistRoutine);
   const syncStatus = useMarcolaStore((s) => s.syncStatus);
 
